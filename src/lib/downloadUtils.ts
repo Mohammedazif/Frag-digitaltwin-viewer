@@ -13,7 +13,7 @@ export async function downloadFragmentFile(
 ): Promise<void> {
   const buffer = await getFragmentBuffer(engine, modelId)
   const baseName = fileName.replace(/\.ifc$/i, '')
-  const file = new File([buffer], `${baseName}.frag`)
+  const file = new File([buffer as unknown as BlobPart], `${baseName}.frag`)
   const url = URL.createObjectURL(file)
 
   const a = document.createElement('a')

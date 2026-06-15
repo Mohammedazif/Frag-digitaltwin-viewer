@@ -2,12 +2,15 @@ import { useState, useCallback } from 'react'
 import { convertIfcToFrag } from '@/lib/ifcConverter'
 import { useAppStore } from '@/store/useAppStore'
 import { useModelStore } from '@/store/useModelStore'
-import { DEFAULT_MODEL_ID } from '@/constants/config'
 import type { LoadedModel } from '@/types'
 
 type Status = 'idle' | 'converting' | 'done' | 'error'
 
-export function useIfcConverter() {
+interface UseIfcConverterOptions {
+  onConverted?: (model: LoadedModel) => void | Promise<void>
+}
+
+export function useIfcConverter(options?: UseIfcConverterOptions) {
   const [status, setStatus] = useState<Status>('idle')
   const [progress, setProgress] = useState(0)
   const [stepLabel, setStepLabel] = useState('')
@@ -43,6 +46,12 @@ export function useIfcConverter() {
         }
 
         addModel(model)
+
+        // Fire callback with the actual model object before changing step
+        if (options?.onConverted) {
+          await options.onConverted(model)
+        }
+
         setStatus('done')
         setStep('viewing')
       } catch (err: any) {
@@ -52,7 +61,7 @@ export function useIfcConverter() {
         setStoreError(msg)
       }
     },
-    []
+    [options?.onConverted]
   )
 
   const reset = useCallback(() => {

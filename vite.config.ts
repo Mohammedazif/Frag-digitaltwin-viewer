@@ -21,6 +21,10 @@ export default defineConfig({
     // Disable chunk size warning
     chunkSizeWarningLimit: 10000,
     rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        viewer: path.resolve(__dirname, 'viewer.html')
+      },
       output: {
         // Manual chunking to avoid OOM during build
         manualChunks: {

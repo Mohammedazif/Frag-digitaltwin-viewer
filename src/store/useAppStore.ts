@@ -14,7 +14,7 @@ interface AppState {
 }
 
 export const useAppStore = create<AppState>((set) => ({
-  step: 'idle',
+  step: 'projects',
   conversionProgress: 0,
   conversionStepLabel: '',
   error: null,
