@@ -21,7 +21,6 @@ export default function App() {
   }
 
   useEffect(() => {
-    // If the converter isn't busy, we have files waiting, and we aren't currently reading a file
     if (status !== 'converting' && fileQueue.length > 0 && !isReadingRef.current) {
       const nextFile = fileQueue[0]
       isReadingRef.current = true
@@ -31,14 +30,13 @@ export default function App() {
         const buffer = e.target?.result as ArrayBuffer
         
         if (nextFile.name.toLowerCase().endsWith('.frag')) {
-          // Direct load, bypass conversion
           const model = {
             modelId: `model-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 9)}`,
             originalFileName: nextFile.name,
             originalFileSizeBytes: nextFile.size,
             convertedFileSizeBytes: buffer.byteLength,
             conversionTimeMs: 0,
-            fragBytes: new Uint8Array(buffer),
+            fragBytes: buffer,
           }
           useModelStore.getState().addModel(model)
           useAppStore.getState().setStep('viewing')
@@ -46,7 +44,6 @@ export default function App() {
           isReadingRef.current = false
           setFileQueue(prev => prev.slice(1))
         } else {
-          // Send to IFC converter
           convert(new Uint8Array(buffer), nextFile.name, nextFile.size)
           isReadingRef.current = false
           setFileQueue(prev => prev.slice(1))

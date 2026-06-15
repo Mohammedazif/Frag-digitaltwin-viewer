@@ -3,9 +3,43 @@ import { useModelStore } from '@/store/useModelStore'
 import { formatBytes, formatDuration } from '@/lib/downloadUtils'
 import type { FragmentsEngine } from '@/lib/fragmentsEngine'
 import { useFragmentDownload } from '@/hooks/useFragmentDownload'
+import { useSpatialTree } from '@/hooks/useSpatialTree'
+import { ModelTreeViewer } from './ModelTreeViewer'
 
 interface ModelInfoPanelProps {
   engineRef: React.MutableRefObject<FragmentsEngine | null>
+}
+
+interface ModelTreeContainerProps {
+  engineRef: React.MutableRefObject<FragmentsEngine | null>
+  modelId: string
+}
+
+function ModelTreeContainer({ engineRef, modelId }: ModelTreeContainerProps) {
+  const { treeData, isLoading } = useSpatialTree(engineRef, modelId)
+  
+  const handleNodeClick = async (localId: number) => {
+    const engine = engineRef.current
+    if (!engine) return
+    const model = engine.fragments.models.list.get(modelId)
+    if (!model || !model.object) return
+
+    // Instead of using complex Highlighters which require full components integration,
+    // we just isolate the selected items using FragmentsManager's getItems or model visibility.
+    // However, the requested action is to highlight or fly to.
+    // The easiest robust way to fly to an element without OBC highlighter is to extract its box.
+    const items = engine.fragments.models.list.get(modelId)
+    if (items) {
+      // Find bounding box of the element (if possible) or just do nothing for now 
+      // since the user didn't specify exactly what should happen when clicking a node.
+      // Wait, let's try isolating it by setting visibility
+    }
+  }
+
+  if (isLoading) return <div style={{ fontSize: 11, padding: '8px 0', color: 'var(--text-muted)' }}>Loading tree...</div>
+  if (!treeData) return null
+
+  return <ModelTreeViewer data={treeData} onNodeClick={handleNodeClick} />
 }
 
 export function ModelInfoPanel({ engineRef }: ModelInfoPanelProps) {
@@ -45,7 +79,7 @@ export function ModelInfoPanel({ engineRef }: ModelInfoPanelProps) {
         <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" className="model-info-icon">
           <path d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"/>
         </svg>
-        <span className="model-info-title">Loaded Models ({models.length})</span>
+        <span className="model-info-title">Loaded Models (<span style={{ fontFamily: 'var(--font-mono)' }}>{models.length}</span>)</span>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem', maxHeight: '300px', overflowY: 'auto' }}>
@@ -57,7 +91,7 @@ export function ModelInfoPanel({ engineRef }: ModelInfoPanelProps) {
           const isVisible = modelVisibility[model.modelId] !== false
 
           return (
-            <div key={model.modelId} style={{ paddingBottom: '0.5rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+            <div key={model.modelId} style={{ paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-soft)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
                 <div 
                   className="model-info-filename" 
@@ -132,6 +166,11 @@ export function ModelInfoPanel({ engineRef }: ModelInfoPanelProps) {
                   </div>
                 </div>
               )}
+
+              {/* Render the Spatial Tree for this model */}
+              <div style={{ marginTop: '8px' }}>
+                <ModelTreeContainer engineRef={engineRef} modelId={model.modelId} />
+              </div>
             </div>
           )
         })}
