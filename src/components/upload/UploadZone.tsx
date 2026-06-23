@@ -20,8 +20,8 @@ export function UploadZone({ onFiles, disabled }: UploadZoneProps) {
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
       const name = file.name.toLowerCase()
-      if (!name.endsWith('.ifc') && !name.endsWith('.frag')) {
-        setError('Only .ifc or .frag files are supported')
+      if (!name.endsWith('.ifc') && !name.endsWith('.frag') && !name.endsWith('.glb') && !name.endsWith('.gltf')) {
+        setError('Only .ifc, .frag, .glb, or .gltf files are supported')
         return
       }
       if (file.size > maxBytes) {
@@ -66,7 +66,7 @@ export function UploadZone({ onFiles, disabled }: UploadZoneProps) {
         <input
           ref={inputRef}
           type="file"
-          accept=".ifc,.frag"
+          accept=".ifc,.frag,.glb,.gltf"
           multiple
           onChange={onInputChange}
           style={{ display: 'none' }}
@@ -78,13 +78,13 @@ export function UploadZone({ onFiles, disabled }: UploadZoneProps) {
           </svg>
         </div>
         <p className="upload-title">
-          {isDragging ? 'Drop your files here' : 'Upload IFC or Frag'}
+          {isDragging ? 'Drop your files here' : 'Upload IFC, Frag, or GLB'}
         </p>
         <p className="upload-hint">
           Drag & drop or click to browse
         </p>
         <p className="upload-meta">
-          .ifc or .frag · max {MAX_FILE_SIZE_MB} MB
+          .ifc, .frag, .glb, .gltf · max {MAX_FILE_SIZE_MB} MB
         </p>
       </div>
 

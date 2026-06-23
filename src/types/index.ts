@@ -13,6 +13,10 @@ export interface LoadedModel {
   convertedFileSizeBytes: number
   conversionTimeMs: number
   fragBytes: ArrayBuffer
+  type?: 'frag' | 'glb'
+  position?: [number, number, number]
+  rotation?: [number, number, number]
+  scale?: [number, number, number]
 }
 
 export interface ConversionProgress {
@@ -20,16 +24,18 @@ export interface ConversionProgress {
   label: string
 }
 
-// ── Project System ─────────────────────────────────────────────────────────
-
 export interface ProjectModelEntry {
   modelId: string
   originalFileName: string
   originalFileSizeBytes: number
   convertedFileSizeBytes: number
   conversionTimeMs: number
-  fragFile: string   // relative path inside project folder e.g. "models/model-abc.frag"
+  fragFile: string
   addedAt: number
+  type?: 'frag' | 'glb'
+  position?: [number, number, number]
+  rotation?: [number, number, number]
+  scale?: [number, number, number]
 }
 
 export interface ProjectMeta {
@@ -48,7 +54,6 @@ export interface ProjectMeta {
   } | null
 }
 
-// ProjectModel is the in-memory representation with the actual bytes loaded
 export interface ProjectModel extends ProjectModelEntry {
   fragBytes: ArrayBuffer
 }

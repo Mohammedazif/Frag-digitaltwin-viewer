@@ -13,16 +13,24 @@ export interface FolderProject {
 
 // ─── Handle Cache (recent projects) ──────────────────────────────────────────
 
-export async function cacheHandle(projectId: string, handle: FileSystemDirectoryHandle) {
-  await set(projectId, handle, handleStore)
+export async function cacheHandle(projectId: string, handle: FileSystemDirectoryHandle, meta: ProjectMeta, thumbnail?: string) {
+  await set(projectId, { handle, meta, thumbnail }, handleStore)
 }
 
-export async function getCachedHandles(): Promise<{ projectId: string; handle: FileSystemDirectoryHandle }[]> {
+export async function getCachedHandles(): Promise<{ projectId: string; handle: FileSystemDirectoryHandle; meta?: ProjectMeta; thumbnail?: string }[]> {
   const allKeys = await keys(handleStore)
-  const results: { projectId: string; handle: FileSystemDirectoryHandle }[] = []
+  const results: { projectId: string; handle: FileSystemDirectoryHandle; meta?: ProjectMeta; thumbnail?: string }[] = []
   for (const key of allKeys) {
-    const handle = await get<FileSystemDirectoryHandle>(key, handleStore)
-    if (handle) results.push({ projectId: String(key), handle })
+    const val = await get<any>(key, handleStore)
+    if (val) {
+      if (val.kind === 'directory') {
+        // legacy format: just the handle
+        results.push({ projectId: String(key), handle: val })
+      } else if (val.handle) {
+        // new format: { handle, meta, thumbnail }
+        results.push({ projectId: String(key), handle: val.handle, meta: val.meta, thumbnail: val.thumbnail })
+      }
+    }
   }
   return results
 }
@@ -114,7 +122,7 @@ export async function createProjectInFolder(name: string): Promise<FolderProject
     }
 
     await writeJson(handle, 'project.json', meta)
-    await cacheHandle(projectId, handle)
+    await cacheHandle(projectId, handle, meta)
 
     return { meta, handle }
   } catch (e: any) {
@@ -130,7 +138,18 @@ export async function openProjectFolder(): Promise<FolderProject | null> {
     const meta = await readJson<ProjectMeta>(handle, 'project.json')
     if (!meta) throw new Error('No project.json found in this folder')
 
-    await cacheHandle(meta.projectId, handle)
+    // Read thumbnail if available to cache it
+    let thumbnail: string | undefined
+    try {
+      const fh = await handle.getFileHandle('thumbnail.webp')
+      const file = await fh.getFile()
+      const buf = await file.arrayBuffer()
+      const b64 = btoa(new Uint8Array(buf).reduce((data, byte) => data + String.fromCharCode(byte), ''))
+      thumbnail = `data:image/webp;base64,${b64}`
+      ;(meta as any).thumbnail = thumbnail
+    } catch { /* missing thumbnail, ok */ }
+
+    await cacheHandle(meta.projectId, handle, meta, thumbnail)
     return { meta, handle }
   } catch (e: any) {
     if (e?.name === 'AbortError') return null
@@ -138,9 +157,29 @@ export async function openProjectFolder(): Promise<FolderProject | null> {
   }
 }
 
-/** Load project from a cached handle */
+/** Load project from a cached handle, including thumbnail */
 export async function loadProjectFromHandle(handle: FileSystemDirectoryHandle): Promise<ProjectMeta | null> {
-  return readJson<ProjectMeta>(handle, 'project.json')
+  const meta = await readJson<ProjectMeta>(handle, 'project.json')
+  if (!meta) return null
+
+  // Read thumbnail.webp from disk and attach as data URL
+  try {
+    const fh = await handle.getFileHandle('thumbnail.webp')
+    const file = await fh.getFile()
+    if (file.size > 0) {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      });
+      (meta as any).thumbnail = dataUrl
+    }
+  } catch {
+    // No thumbnail yet, that's fine
+  }
+
+  return meta
 }
 
 /** Save updated project.json */
@@ -154,9 +193,10 @@ export async function saveModelToProject(
   model: ProjectModel
 ): Promise<string> {
   const modelsDir = await handle.getDirectoryHandle('models', { create: true })
-  const fragFile = `${model.modelId}.frag`
-  await writeBinary(modelsDir, fragFile, model.fragBytes)
-  return `models/${fragFile}`
+  const ext = model.type === 'glb' ? 'glb' : 'frag'
+  const fileName = `${model.modelId}.${ext}`
+  await writeBinary(modelsDir, fileName, model.fragBytes)
+  return `models/${fileName}`
 }
 
 /** Load all model binaries listed in project.json */
@@ -168,8 +208,9 @@ export async function loadModelsFromProject(
   const results: ProjectModel[] = []
 
   for (const entry of meta.models) {
-    const fragFile = `${entry.modelId}.frag`
-    const bytes = await readBinary(modelsDir, fragFile)
+    const ext = entry.type === 'glb' ? 'glb' : 'frag'
+    const fileName = `${entry.modelId}.${ext}`
+    const bytes = await readBinary(modelsDir, fileName)
     if (bytes) {
       results.push({ ...entry, fragBytes: bytes })
     }
@@ -186,6 +227,10 @@ export async function deleteModelFromProject(
   try {
     const modelsDir = await handle.getDirectoryHandle('models')
     await modelsDir.removeEntry(`${modelId}.frag`)
+  } catch { /* ignore if not found */ }
+  try {
+    const modelsDir = await handle.getDirectoryHandle('models')
+    await modelsDir.removeEntry(`${modelId}.glb`)
   } catch { /* ignore if not found */ }
 }
 
@@ -215,9 +260,33 @@ export async function exportProjectAsZip(handle: FileSystemDirectoryHandle, meta
   const modelsDir = await handle.getDirectoryHandle('models', { create: true })
   const modelsFolder = zip.folder('models')!
   for (const entry of meta.models) {
-    const fragName = `${entry.modelId}.frag`
-    const bytes = await readBinary(modelsDir, fragName)
-    if (bytes) modelsFolder.file(fragName, bytes)
+    const ext = entry.type === 'glb' ? 'glb' : 'frag'
+    const fileName = `${entry.modelId}.${ext}`
+    const bytes = await readBinary(modelsDir, fileName)
+    if (bytes) modelsFolder.file(fileName, bytes)
+  }
+
+  // Include Built Viewer App
+  try {
+    const res = await fetch('/api/viewer-assets')
+    if (res.ok) {
+      const files: { path: string, content: string }[] = await res.json()
+      for (const f of files) {
+        if (f.path === 'index.html') continue // Skip the studio app entry
+        zip.file(f.path, f.content, { base64: true })
+      }
+
+      // Add helper scripts to launch the viewer via local server
+      const winBat = `@echo off\necho Starting EKO Digital Twin Viewer...\nstart http://127.0.0.1:8000/viewer.html\npython -m http.server 8000 --bind 127.0.0.1 || python3 -m http.server 8000 --bind 127.0.0.1\npause`
+      // const macSh = `#!/bin/bash\necho "Starting EKO Digital Twin Viewer..."\nopen http://localhost:8000/viewer.html || xdg-open http://localhost:8000/viewer.html\npython3 -m http.server 8000 || python -m http.server 8000`
+      
+      zip.file('Start_Viewer_Windows.bat', winBat)
+      // zip.file('Start_Viewer_Mac_Linux.command', macSh)
+    } else {
+      console.warn("Viewer assets not bundled. You must run `npm run build` in the studio first.")
+    }
+  } catch (err) {
+    console.error("Failed to include viewer assets in zip", err)
   }
 
   return zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 3 } })

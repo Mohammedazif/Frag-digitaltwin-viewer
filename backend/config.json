@@ -1,0 +1,45 @@
+{
+  "project_name": "ekoMedical",
+  "fin_server_url": "https://localhost",
+  "display_name": "Hospital Digital Twin",
+
+  "realtime_endpoints": {
+    "points":    "/api/{project}/eval?expr=readAll(point+or+cmd+or+sensor)",
+    "equipment": "/api/{project}/read?filter=equip",
+    "alarms":    "/api/{project}/eval?expr=readAll(equip+or+point).alarms(today)"
+  },
+
+  "power_endpoints": {
+    "Total_Power_Consumption_his": "/api/{project}/eval?expr=hisRead(@p:{project}:r:31034e49-1f300fe1,2026-01-01..today()%2C%7B-limit%7D)",
+    "AHU_Usage_his": "/api/{project}/eval?expr=hisRead(@p:{project}:r:31034e49-b986583a,2026-01-01..today()%2C%7B-limit%7D)",
+    "BOILER_Usage_his": "/api/{project}/eval?expr=hisRead(@p:{project}:r:3105cf6b-faa023ca,2026-01-01..today()%2C%7B-limit%7D)",
+    "CHILLER_Usage_his": "/api/{project}/eval?expr=hisRead(@p:{project}:r:3105cf6b-d483c5f7,2026-01-01..today()%2C%7B-limit%7D)",
+    "COOLING_TOWER_Usage_his": "/api/{project}/eval?expr=hisRead(@p:{project}:r:3105cf6b-ae5752c0,2026-01-01..today()%2C%7B-limit%7D)",
+    "FCU_Usage_his": "/api/{project}/eval?expr=hisRead(@p:{project}:r:3105c687-8436b4e7,2026-01-01..today()%2C%7B-limit%7D)",
+    "Lighting_Usage_his": "/api/{project}/eval?expr=hisRead(@p:{project}:r:3105c687-d66c2275,2026-01-01..today()%2C%7B-limit%7D)",
+    "PUMPs_Usage_his": "/api/{project}/eval?expr=hisRead(@p:{project}:r:3105cf6b-c3032a1e,2026-01-01..today()%2C%7B-limit%7D)",
+    "Power_Usage_his": "/api/{project}/eval?expr=hisRead(@p:{project}:r:3105c687-d5277330,2026-01-01..today()%2C%7B-limit%7D)",
+    "VAV_Consumption_his": "/api/{project}/eval?expr=hisRead(@p:{project}:r:31034e49-efdd0bc0,2026-01-01..today()%2C%7B-limit%7D)",
+    "Water_Consumption_his": "/api/{project}/eval?expr=hisRead(@p:{project}:r:310346fb-95c42637,2026-01-01..today()%2C%7B-limit%7D)",
+    "Carbon_Emission_his": "/api/{project}/eval?expr=hisRead(@p:{project}:r:3105de9e-0091a3a6,2026-01-01..today()%2C%7B-limit%7D)"
+  },
+
+  "live_point_ids": {
+    "total_power":    "p:{project}:r:31034e49-1f300fe1",
+    "carbon":         "p:{project}:r:3105de9e-0091a3a6",
+    "current_month":  "p:{project}:r:31034e49-4c6c035e",
+    "previous_month": "p:{project}:r:3105c5a1-a272e1a7",
+    "target_monthly": "p:{project}:r:3105c687-98bd4374",
+    "ahu":            "p:{project}:r:31034e49-b986583a",
+    "fcu":            "p:{project}:r:3105c687-8436b4e7",
+    "boiler":         "p:{project}:r:3105cf6b-faa023ca",
+    "chiller":        "p:{project}:r:3105cf6b-d483c5f7",
+    "cooling_tower":  "p:{project}:r:3105cf6b-ae5752c0",
+    "vav":            "p:{project}:r:31034e49-efdd0bc0",
+    "lighting":       "p:{project}:r:3105c687-d66c2275",
+    "power_sockets":  "p:{project}:r:3105c687-d5277330",
+    "pumps":          "p:{project}:r:3105cf6b-c3032a1e"
+  },
+
+  "_comment": "To use a different FIN project, change project_name and update the point reference IDs above."
+}

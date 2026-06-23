@@ -21,15 +21,17 @@ export default function App() {
 
   // Called immediately after a model is converted — saves to project folder
   const handleModelConverted = useCallback(async (model: LoadedModel) => {
-    if (currentProject) {
+    // Read project state directly from store to avoid stale closure
+    const project = useProjectStore.getState().currentProject
+    if (project) {
       await addModelEntry(model)
-      // Capture thumbnail after a short render delay
+      // Capture thumbnail after scene has rendered the new model
       setTimeout(async () => {
-        const thumb = captureCanvasThumbnail()
+        const thumb = captureCanvasThumbnail(engineRef.current)
         if (thumb) await updateThumbnail(thumb)
-      }, 2500)
+      }, 3000)
     }
-  }, [currentProject, addModelEntry, updateThumbnail])
+  }, [addModelEntry, updateThumbnail])
 
   const { convert } = useIfcConverter({ onConverted: handleModelConverted })
 
@@ -39,9 +41,9 @@ export default function App() {
 
     for (const file of files) {
       const isFragFile = file.name.toLowerCase().endsWith('.frag')
+      const isGlbFile = file.name.toLowerCase().endsWith('.glb') || file.name.toLowerCase().endsWith('.gltf')
 
-      if (isFragFile) {
-        // Direct .frag load — no conversion needed
+      if (isFragFile || isGlbFile) {
         const buffer = await file.arrayBuffer()
         const model: LoadedModel = {
           modelId: `model-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 9)}`,
@@ -50,10 +52,17 @@ export default function App() {
           convertedFileSizeBytes: buffer.byteLength,
           conversionTimeMs: 0,
           fragBytes: buffer,
+          type: isGlbFile ? 'glb' : 'frag',
         }
         addModel(model)
-        if (currentProject) {
+        const project = useProjectStore.getState().currentProject
+        if (project) {
           await addModelEntry(model)
+          // Capture thumbnail after a render delay
+          setTimeout(async () => {
+            const thumb = captureCanvasThumbnail(engineRef.current)
+            if (thumb) await updateThumbnail(thumb)
+          }, 3000)
         }
         setStep('viewing')
       } else {
@@ -62,7 +71,7 @@ export default function App() {
         await convert(new Uint8Array(buffer), file.name, file.size)
       }
     }
-  }, [convert, addModel, addModelEntry, currentProject, setStep])
+  }, [convert, addModel, addModelEntry, setStep, updateThumbnail])
 
   const handleEngineReady = useCallback(
     (ref: React.MutableRefObject<FragmentsEngine | null>) => {

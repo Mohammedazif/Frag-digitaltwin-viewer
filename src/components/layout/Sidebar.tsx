@@ -7,6 +7,7 @@ import { ConversionProgress } from '@/components/upload/ConversionProgress'
 import { ModelInfoPanel } from '@/components/model/ModelInfoPanel'
 import { DownloadButton } from '@/components/download/DownloadButton'
 import { ProjectListPage } from '@/components/project/ProjectListPage'
+import { FinLoginPanel } from '@/components/fin/FinLoginPanel'
 import type { FragmentsEngine } from '@/lib/fragmentsEngine'
 
 interface SidebarProps {
@@ -27,15 +28,31 @@ export function Sidebar({ onFiles, engineRef }: SidebarProps) {
   const currentProject = useProjectStore(s => s.currentProject)
   const closeProject = useProjectStore(s => s.closeProject)
   const exportAsZip = useProjectStore(s => s.exportAsZip)
+  const updateThumbnail = useProjectStore(s => s.updateThumbnail)
   const setStep = useAppStore(s => s.setStep)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const handleClearAll = () => {
+  const handleClearAll = async () => {
     const engine = engineRef.current
+
+    // Capture thumbnail right before closing if we are in a project
+    if (currentProject && engine) {
+      const { captureCanvasThumbnail } = await import('@/lib/thumbnailCapture')
+      const thumb = captureCanvasThumbnail(engine)
+      if (thumb) await updateThumbnail(thumb)
+    }
+
     if (engine && models.length > 0) {
       models.forEach(m => {
-        engine.fragments.disposeModel(m.modelId).catch(() => {})
+        if (m.type === 'glb') {
+          const existing = engine.world.scene.three.children.find((c: any) => c.userData?.modelId === m.modelId)
+          if (existing) {
+            engine.world.scene.three.remove(existing)
+          }
+        } else {
+          engine.fragments.disposeModel(m.modelId).catch(() => {})
+        }
       })
     }
     clearModels()
@@ -91,6 +108,7 @@ export function Sidebar({ onFiles, engineRef }: SidebarProps) {
         {(step === 'viewing') && (
           <>
             <ModelInfoPanel engineRef={engineRef} />
+            <FinLoginPanel />
             <DownloadButton engineRef={engineRef} />
             
             {currentProject && (
@@ -116,7 +134,7 @@ export function Sidebar({ onFiles, engineRef }: SidebarProps) {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".ifc,.frag"
+              accept=".ifc,.frag,.glb,.gltf"
               multiple
               onChange={onInputChange}
               style={{ display: 'none' }}

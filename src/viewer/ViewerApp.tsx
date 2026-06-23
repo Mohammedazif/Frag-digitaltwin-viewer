@@ -32,7 +32,6 @@ export default function ViewerApp() {
 
       setProjectMeta(meta)
 
-      // Load all .frag models from the project folder
       const projectModels = await loadModelsFromProject(handle, meta)
       for (const pm of projectModels) {
         const model: LoadedModel = {
@@ -42,6 +41,10 @@ export default function ViewerApp() {
           convertedFileSizeBytes: pm.convertedFileSizeBytes,
           conversionTimeMs: pm.conversionTimeMs,
           fragBytes: pm.fragBytes,
+          type: pm.type,
+          position: pm.position,
+          rotation: pm.rotation,
+          scale: pm.scale,
         }
         addModel(model)
       }
@@ -61,6 +64,68 @@ export default function ViewerApp() {
     },
     []
   )
+
+// Load project
+  useEffect(() => {
+    let mounted = true
+    async function autoLoad() {
+      try {
+        setIsLoading(true)
+        let res: Response | null = null
+        for (let i = 0; i < 3; i++) {
+          try {
+            res = await fetch('project.json')
+            if (res.ok) break
+          } catch (e) {
+            if (i === 2) throw e
+            await new Promise(r => setTimeout(r, 500))
+          }
+        }
+        
+        if (!res || !res.ok) throw new Error('project.json not found')
+        
+        const contentType = res.headers.get('content-type')
+        if (contentType && contentType.includes('text/html')) {
+          throw new Error('Received HTML instead of JSON. (If you are in the dev server, this is expected. Export the project to test auto-load.)')
+        }
+
+        const meta = (await res.json()) as ProjectMeta
+        
+        if (!mounted) return
+        setProjectMeta(meta)
+
+        for (const m of meta.models) {
+          if (!m.fragFile) continue
+          const modelRes = await fetch(m.fragFile)
+          if (!modelRes.ok) continue
+          
+          const buffer = await modelRes.arrayBuffer()
+          const model: LoadedModel = {
+            modelId: m.modelId,
+            originalFileName: m.originalFileName,
+            originalFileSizeBytes: m.originalFileSizeBytes,
+            convertedFileSizeBytes: buffer.byteLength,
+            conversionTimeMs: m.conversionTimeMs,
+            fragBytes: buffer,
+            type: m.type,
+            position: m.position,
+            rotation: m.rotation,
+            scale: m.scale,
+          }
+          if (mounted) addModel(model)
+        }
+        if (mounted) setStep('viewing')
+      } catch (e: any) {
+        console.error('Auto-load failed (expected if in dev server or file://):', e.message)
+      } finally {
+        if (mounted) setIsLoading(false)
+      }
+    }
+    
+    autoLoad()
+    
+    return () => { mounted = false }
+  }, [addModel, setStep])
 
   const hasModels = models.length > 0
 
@@ -94,12 +159,12 @@ export default function ViewerApp() {
         </div>
       </header>
 
-      {/* Body — full-width viewer, no sidebar */}
+      {/* Body*/}
       <div className="app-body">
         <main className="app-main">
           <ViewerCanvas onEngineReady={handleEngineReady} />
 
-          {/* Open Project overlay (shown when no models loaded) */}
+          {/* Open Project overlay */}
           {!hasModels && (
             <div className="viewer-overlay" style={{ background: 'rgba(245,246,248,0.92)' }}>
               <div style={{

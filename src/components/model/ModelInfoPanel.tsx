@@ -58,10 +58,19 @@ export function ModelInfoPanel({ engineRef }: ModelInfoPanelProps) {
   const handleToggle = (modelId: string) => {
     const engine = engineRef.current
     if (!engine) return
-    const fragModel = engine.fragments.models.list.get(modelId)
-    if (fragModel && fragModel.object) {
+    const model = models.find(m => m.modelId === modelId)
+    
+    let object3D = null
+    if (model?.type === 'glb') {
+      object3D = engine.world.scene.three.children.find((c: any) => c.userData?.modelId === modelId)
+    } else {
+      const fragModel = engine.fragments.models.list.get(modelId)
+      object3D = fragModel?.object
+    }
+
+    if (object3D) {
       const isCurrentlyVisible = modelVisibility[modelId] !== false
-      fragModel.object.visible = !isCurrentlyVisible
+      object3D.visible = !isCurrentlyVisible
       toggleVisibilityState(modelId)
     }
   }
@@ -69,9 +78,18 @@ export function ModelInfoPanel({ engineRef }: ModelInfoPanelProps) {
   const handleFocus = async (modelId: string) => {
     const engine = engineRef.current
     if (!engine) return
-    const fragModel = engine.fragments.models.list.get(modelId)
-    if (fragModel && fragModel.object && modelVisibility[modelId] !== false) {
-      const box = new Box3().setFromObject(fragModel.object)
+    const model = models.find(m => m.modelId === modelId)
+    
+    let object3D = null
+    if (model?.type === 'glb') {
+      object3D = engine.world.scene.three.children.find((c: any) => c.userData?.modelId === modelId)
+    } else {
+      const fragModel = engine.fragments.models.list.get(modelId)
+      object3D = fragModel?.object
+    }
+
+    if (object3D && modelVisibility[modelId] !== false) {
+      const box = new Box3().setFromObject(object3D)
       if (!box.isEmpty()) {
         await engine.world.camera.controls.fitToBox(box, true)
       }
@@ -83,7 +101,13 @@ export function ModelInfoPanel({ engineRef }: ModelInfoPanelProps) {
     const engine = engineRef.current
     if (engine) {
       try {
-        await engine.fragments.disposeModel(modelId)
+        const model = models.find(m => m.modelId === modelId)
+        if (model?.type === 'glb') {
+          const existing = engine.world.scene.three.children.find((c: any) => c.userData?.modelId === modelId)
+          if (existing) engine.world.scene.three.remove(existing)
+        } else {
+          await engine.fragments.disposeModel(modelId)
+        }
       } catch { /* ignore */ }
     }
 
@@ -119,7 +143,6 @@ export function ModelInfoPanel({ engineRef }: ModelInfoPanelProps) {
                 <div 
                   className="model-info-filename" 
                   title={model.originalFileName} 
-                  onClick={() => handleFocus(model.modelId)}
                   style={{ 
                     opacity: isVisible ? 1 : 0.5, 
                     flex: 1, 
@@ -127,7 +150,6 @@ export function ModelInfoPanel({ engineRef }: ModelInfoPanelProps) {
                     textOverflow: 'ellipsis', 
                     whiteSpace: 'nowrap', 
                     marginRight: '0.5rem',
-                    cursor: isVisible ? 'pointer' : 'default'
                   }}
                 >
                   {model.originalFileName}
@@ -151,14 +173,25 @@ export function ModelInfoPanel({ engineRef }: ModelInfoPanelProps) {
                     )}
                   </button>
                   <button 
-                    onClick={() => download(model.modelId, model.originalFileName)} 
+                    onClick={() => handleFocus(model.modelId)} 
                     style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', opacity: 0.8, padding: '2px' }}
-                    title="Download this model"
+                    title="Focus camera on this model"
                   >
                     <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
-                      <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd"/>
+                      <path d="M5 3a2 2 0 00-2 2v2a1 1 0 102 0V5h2a1 1 0 100-2H5zM5 17a2 2 0 01-2-2v-2a1 1 0 112 0v2h2a1 1 0 110 2H5zM15 3a2 2 0 012 2v2a1 1 0 11-2 0V5h-2a1 1 0 110-2h2zM15 17a2 2 0 002-2v-2a1 1 0 10-2 0v2h-2a1 1 0 100 2h2z" />
                     </svg>
                   </button>
+                  {model.type !== 'glb' && (
+                    <button 
+                      onClick={() => download(model.modelId, model.originalFileName)} 
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', opacity: 0.8, padding: '2px' }}
+                      title="Download this model"
+                    >
+                      <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+                        <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd"/>
+                      </svg>
+                    </button>
+                  )}
                   <button 
                     onClick={() => handleRemoveModel(model.modelId)} 
                     className="model-remove-btn"
@@ -199,10 +232,12 @@ export function ModelInfoPanel({ engineRef }: ModelInfoPanelProps) {
                 </div>
               )}
 
-              {/* Render the Spatial Tree for this model */}
-              <div style={{ marginTop: '8px' }}>
-                <ModelTreeContainer engineRef={engineRef} modelId={model.modelId} />
-              </div>
+              {/* Render the Spatial Tree for this model (if not GLB) */}
+              {model.type !== 'glb' && (
+                <div style={{ marginTop: '8px' }}>
+                  <ModelTreeContainer engineRef={engineRef} modelId={model.modelId} />
+                </div>
+              )}
             </div>
           )
         })}

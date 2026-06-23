@@ -1,9 +1,12 @@
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState, useCallback } from 'react'
+import * as THREE from 'three'
 import { useFragmentsEngine } from '@/hooks/useFragmentsEngine'
 import { useModelLoader } from '@/hooks/useModelLoader'
 import { useModelStore } from '@/store/useModelStore'
 import { useAppStore } from '@/store/useAppStore'
 import { ViewerToolbar } from './ViewerToolbar'
+import { ModelPositionPanel } from '@/components/viewer/ModelPositionPanel'
+import { RenderPanel } from '@/components/viewer/RenderPanel'
 import type { FragmentsEngine } from '@/lib/fragmentsEngine'
 
 interface ViewerCanvasProps {
@@ -15,18 +18,32 @@ export function ViewerCanvas({ onEngineReady }: ViewerCanvasProps) {
   const statsRef = useRef<any>(null)
   const statsContainerRef = useRef<HTMLDivElement>(null)
   const [statsVisible, setStatsVisible] = useState(false)
+  const [pickerActive, setPickerActive] = useState(false)
+  const [pickedCoord, setPickedCoord] = useState<[number, number, number] | null>(null)
 
   const { engineRef, isReady, error } = useFragmentsEngine(containerRef)
   const { loadModel, isLoading } = useModelLoader(engineRef)
   const models = useModelStore(s => s.models)
   const step = useAppStore(s => s.step)
+  const realisticMode = useAppStore(s => s.realisticMode)
+  const exposure = useAppStore(s => s.exposure)
+  const lightIntensity = useAppStore(s => s.lightIntensity)
+  const ambientIntensity = useAppStore(s => s.ambientIntensity)
+  const timeOfDay = useAppStore(s => s.timeOfDay)
+  const bloomStrength = useAppStore(s => s.bloomStrength)
+  const bloomThreshold = useAppStore(s => s.bloomThreshold)
+  const fogDensity = useAppStore(s => s.fogDensity)
 
-  // Notify parent of engine ref once ready
   useEffect(() => {
     if (isReady && onEngineReady) onEngineReady(engineRef)
   }, [isReady])
 
-  // Load models that haven't been loaded yet
+  useEffect(() => {
+    if (isReady && engineRef.current) {
+      engineRef.current.setLightingParams({ realisticMode, exposure, lightIntensity, ambientIntensity, timeOfDay, bloomStrength, bloomThreshold, fogDensity })
+    }
+  }, [realisticMode, exposure, lightIntensity, ambientIntensity, timeOfDay, bloomStrength, bloomThreshold, fogDensity, isReady])
+
   const loadedIdsRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
@@ -38,12 +55,15 @@ export function ViewerCanvas({ onEngineReady }: ViewerCanvasProps) {
     currentModels.forEach(model => {
       if (model.fragBytes && !loadedIdsRef.current.has(model.modelId)) {
         loadedIdsRef.current.add(model.modelId)
-        loadModel(model.fragBytes, model.modelId)
+        loadModel(model.fragBytes, model.modelId, model.type, {
+          position: model.position,
+          rotation: model.rotation,
+          scale: model.scale,
+        })
       }
     })
   }, [models, isReady])
 
-  // Stats.js setup
   useEffect(() => {
     if (!isReady || !statsContainerRef.current) return
     let Stats: any
@@ -54,7 +74,6 @@ export function ViewerCanvas({ onEngineReady }: ViewerCanvasProps) {
       stats.dom.style.position = 'absolute'
       stats.dom.style.top = '0'
       stats.dom.style.left = '0'
-      // Set initial visibility
       setStatsVisible(prev => {
         stats.dom.style.display = prev ? 'block' : 'none'
         return prev
@@ -76,17 +95,50 @@ export function ViewerCanvas({ onEngineReady }: ViewerCanvasProps) {
     }
   }, [isReady])
 
-  // Toggle stats visibility
   useEffect(() => {
     if (statsRef.current?.dom) {
       statsRef.current.dom.style.display = statsVisible ? 'block' : 'none'
     }
   }, [statsVisible])
 
+  const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!pickerActive) return
+    const engine = engineRef.current
+    if (!engine) return
+    const container = containerRef.current
+    if (!container) return
+
+    const rect = container.getBoundingClientRect()
+    const x = ((e.clientX - rect.left) / rect.width) * 2 - 1
+    const y = -((e.clientY - rect.top) / rect.height) * 2 + 1
+
+    const raycaster = new THREE.Raycaster()
+    raycaster.setFromCamera(new THREE.Vector2(x, y), engine.world.camera.three)
+
+    const meshes: THREE.Object3D[] = []
+    engine.world.scene.three.traverse((obj: THREE.Object3D) => {
+      if ((obj as THREE.Mesh).isMesh) meshes.push(obj)
+    })
+
+    const hits = raycaster.intersectObjects(meshes, false)
+    if (hits.length > 0) {
+      const p = hits[0].point
+      setPickedCoord([
+        parseFloat(p.x.toFixed(3)),
+        parseFloat(p.y.toFixed(3)),
+        parseFloat(p.z.toFixed(3)),
+      ])
+    }
+  }, [pickerActive])
+
   return (
     <div className="viewer-canvas-wrapper">
       {/* Three.js mount */}
-      <div ref={containerRef} className="viewer-canvas-container" />
+      <div
+        ref={containerRef}
+        className={`viewer-canvas-container${pickerActive ? ' picker-cursor' : ''}`}
+        onClick={handleCanvasClick}
+      />
 
       {/* Stats overlay */}
       <div ref={statsContainerRef} className="stats-overlay" />
@@ -97,7 +149,21 @@ export function ViewerCanvas({ onEngineReady }: ViewerCanvasProps) {
           engineRef={engineRef}
           onToggleStats={() => setStatsVisible(v => !v)}
           statsVisible={statsVisible}
+          pickerActive={pickerActive}
+          onTogglePicker={() => setPickerActive(v => !v)}
         />
+      )}
+
+      {/* Right side panels */}
+      {step === 'viewing' && (
+        <div className="right-panels-container">
+          <RenderPanel />
+          <ModelPositionPanel 
+            engineRef={engineRef} 
+            pickedCoord={pickedCoord}
+            onClearPickedCoord={() => setPickedCoord(null)}
+          />
+        </div>
       )}
 
       {/* Loading overlay */}

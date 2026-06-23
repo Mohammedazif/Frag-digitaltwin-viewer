@@ -41,6 +41,7 @@ interface ProjectState {
   // Model management within project
   addModelEntry: (model: LoadedModel) => Promise<ProjectModelEntry | null>
   removeModelEntry: (modelId: string) => Promise<void>
+  updateModelTransform: (modelId: string, transform: { position?: [number, number, number], rotation?: [number, number, number], scale?: [number, number, number] }) => Promise<void>
   updateThumbnail: (dataUrl: string) => Promise<void>
   setDirty: (dirty: boolean) => void
 }
@@ -56,15 +57,32 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set({ isLoading: true })
     const cached = await getCachedHandles()
     const valid: RecentProject[] = []
-    for (const { handle } of cached) {
+    const seenIds = new Set<string>()
+
+    for (const { projectId, handle, meta: cachedMeta, thumbnail: cachedThumb } of cached) {
       try {
-        const meta = await loadProjectFromHandle(handle)
-        if (meta) valid.push({ meta, handle })
+        let meta = await loadProjectFromHandle(handle)
+        
+        if (!meta && cachedMeta) {
+          meta = cachedMeta
+          if (cachedThumb) (meta as any).thumbnail = cachedThumb
+        }
+
+        if (meta) {
+          if (seenIds.has(meta.projectId) || meta.projectId !== projectId) {
+            await removeCachedHandle(projectId)
+          }
+
+          if (!seenIds.has(meta.projectId)) {
+            seenIds.add(meta.projectId)
+            valid.push({ meta, handle })
+          }
+        }
       } catch {
-        // handle no longer valid, skip
+        await removeCachedHandle(projectId)
       }
     }
-    valid.sort((a, b) => b.meta.updatedAt - a.meta.updatedAt)
+    valid.sort((a, b) => b.meta.updatedAt - b.meta.updatedAt)
     set({ recentProjects: valid, isLoading: false })
   },
 
@@ -105,7 +123,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const meta = await loadProjectFromHandle(handle)
     if (!meta) return null
 
-    await cacheHandle(meta.projectId, handle)
+    await cacheHandle(meta.projectId, handle, meta, (meta as any).thumbnail)
 
     const recent = get().recentProjects.filter(r => r.meta.projectId !== meta.projectId)
     set({
@@ -126,8 +144,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     if (!currentProject || !folderHandle) return
     const updated = { ...currentProject, updatedAt: Date.now() }
     await saveProjectMeta(folderHandle, updated)
+    await cacheHandle(updated.projectId, folderHandle, updated, (updated as any).thumbnail)
 
-    // Refresh the recent list
     const recent = get().recentProjects.map(r =>
       r.meta.projectId === updated.projectId ? { ...r, meta: updated } : r
     )
@@ -157,9 +175,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const { currentProject, folderHandle } = get()
     if (!currentProject || !folderHandle) return null
 
-    // CRITICAL: Clone the bytes synchronously BEFORE any await.
-    // The 3D engine's load() call detaches/neuters the original ArrayBuffer,
-    // and React effects can fire between our awaits, causing a 0-byte write.
     const bytesCopy = new ArrayBuffer(model.fragBytes.byteLength)
     new Uint8Array(bytesCopy).set(new Uint8Array(model.fragBytes))
 
@@ -169,20 +184,20 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       originalFileSizeBytes: model.originalFileSizeBytes,
       convertedFileSizeBytes: model.convertedFileSizeBytes,
       conversionTimeMs: model.conversionTimeMs,
-      fragFile: `models/${model.modelId}.frag`,
+      fragFile: `models/${model.modelId}.${model.type === 'glb' ? 'glb' : 'frag'}`,
       addedAt: Date.now(),
+      type: model.type,
     }
 
-    // Write .frag to disk using our safe copy
     await saveModelToProject(folderHandle, { ...entry, fragBytes: bytesCopy })
 
-    // Update project.json
     const updated: ProjectMeta = {
       ...currentProject,
       models: [...currentProject.models, entry],
       updatedAt: Date.now(),
     }
     await saveProjectMeta(folderHandle, updated)
+    await cacheHandle(updated.projectId, folderHandle, updated, (updated as any).thumbnail)
 
     const recent = get().recentProjects.map(r =>
       r.meta.projectId === updated.projectId ? { ...r, meta: updated } : r
@@ -212,12 +227,35 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   updateThumbnail: async (dataUrl: string) => {
-    const { folderHandle, currentProject } = get()
+    const { folderHandle, currentProject, recentProjects } = get()
     if (!folderHandle || !currentProject) return
     await saveThumbnailToProject(folderHandle, dataUrl)
-    // Store a lightweight data-url in meta for the project list card
     const updated = { ...currentProject, thumbnail: dataUrl }
-    set({ currentProject: updated })
+    
+    const updatedRecent = recentProjects.map(r => 
+      r.meta.projectId === updated.projectId ? { ...r, meta: updated } : r
+    )
+    
+    set({ currentProject: updated, recentProjects: updatedRecent })
+  },
+
+  updateModelTransform: async (modelId: string, transform: { position?: [number, number, number], rotation?: [number, number, number], scale?: [number, number, number] }) => {
+    const { currentProject, folderHandle } = get()
+    if (!currentProject || !folderHandle) return
+
+    const updated: ProjectMeta = {
+      ...currentProject,
+      models: currentProject.models.map(m =>
+        m.modelId === modelId ? { ...m, ...transform } : m
+      ),
+      updatedAt: Date.now(),
+    }
+    await saveProjectMeta(folderHandle, updated)
+
+    const recent = get().recentProjects.map(r =>
+      r.meta.projectId === updated.projectId ? { ...r, meta: updated } : r
+    )
+    set({ currentProject: updated, isDirty: false, recentProjects: recent })
   },
 
   setDirty: (dirty) => set({ isDirty: dirty }),

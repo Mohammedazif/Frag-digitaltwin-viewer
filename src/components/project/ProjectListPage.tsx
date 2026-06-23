@@ -70,6 +70,10 @@ export function ProjectListPage() {
         convertedFileSizeBytes: pm.convertedFileSizeBytes,
         conversionTimeMs: pm.conversionTimeMs,
         fragBytes: pm.fragBytes,
+        type: pm.type,
+        position: pm.position,
+        rotation: pm.rotation,
+        scale: pm.scale,
       })
     }
     setStep('viewing')
