@@ -47,9 +47,9 @@ export async function initFragmentsEngine(
   // Custom Realistic Lights & Environment
   const realisticGroup = new THREE.Group()
   
-  // Sky
+  // Sky - scaled massively so the camera never leaves the box
   const sky = new Sky()
-  sky.scale.setScalar(45000)
+  sky.scale.setScalar(500000)
   
   const skyUniforms = sky.material.uniforms
   skyUniforms['turbidity'].value = 10
@@ -63,15 +63,17 @@ export async function initFragmentsEngine(
   rDir.position.set(500, 1000, 500)
   rDir.castShadow = true
   
+  // Increase map size for better resolution over large area
   rDir.shadow.mapSize.width = 4096
   rDir.shadow.mapSize.height = 4096
-  rDir.shadow.camera.near = 0.5
+  rDir.shadow.camera.near = 10
   rDir.shadow.camera.far = 10000
   rDir.shadow.camera.left = -2000
   rDir.shadow.camera.right = 2000
   rDir.shadow.camera.top = 2000
   rDir.shadow.camera.bottom = -2000
-  rDir.shadow.bias = -0.0001
+  rDir.shadow.bias = -0.005
+  rDir.shadow.normalBias = 0.1
   
   realisticGroup.add(sky, rAmbient, rDir)
   world.scene.three.add(realisticGroup)
@@ -177,14 +179,14 @@ export async function initFragmentsEngine(
   world.camera = new OBC.SimpleCamera(components)
 
   if (world.camera.three instanceof THREE.PerspectiveCamera || world.camera.three instanceof THREE.OrthographicCamera) {
-    world.camera.three.near = 0.5
-    world.camera.three.far = 50000
+    world.camera.three.near = 0.1
+    world.camera.three.far = 200000
     world.camera.three.updateProjectionMatrix()
   }
 
   if (world.camera.controls) {
     world.camera.controls.maxDistance = Infinity
-    world.camera.controls.minDistance = 0.5
+    world.camera.controls.minDistance = 0.1
     world.camera.controls.dollySpeed = 2
     world.camera.controls.infinityDolly = true
     world.camera.controls.dollyToCursor = true
@@ -192,19 +194,10 @@ export async function initFragmentsEngine(
 
   world.camera.controls.setLookAt(50, 30, 50, 0, 0, 0)
 
-  // Postprocessing (SSAO + Bloom + SMAA)
+  // Postprocessing (SMAA only, Bloom disabled to prevent white blowouts on close surfaces)
   const composer = new EffectComposer(world.renderer.three)
   const renderPass = new RenderPass(world.scene.three, world.camera.three)
   composer.addPass(renderPass)
-
-  const ssaoPass = new SSAOPass(world.scene.three, world.camera.three, window.innerWidth, window.innerHeight)
-  ssaoPass.kernelRadius = 8
-  ssaoPass.minDistance = 0.002
-  ssaoPass.maxDistance = 0.05
-  composer.addPass(ssaoPass)
-
-  bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.15, 0.4, 1.5)
-  composer.addPass(bloomPass)
 
   const outputPass = new OutputPass()
   composer.addPass(outputPass)
@@ -232,8 +225,6 @@ export async function initFragmentsEngine(
       world.camera.three.updateProjectionMatrix()
     }
     composer.setSize(size.x, size.y)
-    ssaoPass.setSize(size.x, size.y)
-    bloomPass.setSize(size.x, size.y)
     smaaPass.setSize(size.x * window.devicePixelRatio, size.y * window.devicePixelRatio)
   })
 
