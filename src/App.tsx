@@ -86,7 +86,7 @@ export default function App() {
       <div className="app-body">
         <Sidebar onFiles={handleFiles} engineRef={engineRef} />
         <main className="app-main">
-          <ViewerCanvas onEngineReady={handleEngineReady} />
+          <ViewerCanvas onEngineReady={handleEngineReady} adminMode={true} />
         </main>
       </div>
     </div>

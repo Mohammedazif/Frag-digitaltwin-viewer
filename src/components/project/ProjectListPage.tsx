@@ -4,8 +4,14 @@ import { useAppStore } from '@/store/useAppStore'
 import { useModelStore } from '@/store/useModelStore'
 import { loadModelsFromProject } from '@/lib/projectDb'
 import type { ProjectMeta } from '@/types'
+import type { FragmentsEngine } from '@/lib/fragmentsEngine'
+import * as THREE from 'three'
 
-export function ProjectListPage() {
+interface ProjectListPageProps {
+  engineRef?: React.MutableRefObject<FragmentsEngine | null>
+}
+
+export function ProjectListPage({ engineRef }: ProjectListPageProps) {
   const {
     recentProjects,
     isLoading,
@@ -18,6 +24,8 @@ export function ProjectListPage() {
   } = useProjectStore()
 
   const setStep = useAppStore(s => s.setStep)
+  const setRealisticMode = useAppStore(s => s.setRealisticMode)
+  const setLightingParams = useAppStore(s => s.setLightingParams)
   const addModel = useModelStore(s => s.addModel)
   const [newProjectName, setNewProjectName] = useState('')
   const [showNewForm, setShowNewForm] = useState(false)
@@ -76,7 +84,29 @@ export function ProjectListPage() {
         scale: pm.scale,
       })
     }
+    
+    // Restore settings if present
+    if (meta.renderSettings) {
+      setRealisticMode(meta.renderSettings.realisticMode)
+      setLightingParams(meta.renderSettings)
+    }
+
+    // Set viewing step first so RenderPanel and others mount if needed
     setStep('viewing')
+
+    // Restore camera position if present (give it a small delay to ensure engine is fully ready)
+    if (meta.camera && engineRef?.current) {
+      setTimeout(() => {
+        const engine = engineRef.current
+        if (engine && meta.camera) {
+          engine.world.camera.controls.setLookAt(
+            meta.camera.position[0], meta.camera.position[1], meta.camera.position[2],
+            meta.camera.target[0], meta.camera.target[1], meta.camera.target[2],
+            false
+          )
+        }
+      }, 200)
+    }
   }
 
   const handleDeleteRecent = async (projectId: string) => {

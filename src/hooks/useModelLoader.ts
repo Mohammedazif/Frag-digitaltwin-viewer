@@ -3,12 +3,12 @@ import { Box3 } from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { useModelStore } from '@/store/useModelStore'
 import type { FragmentsEngine } from '@/lib/fragmentsEngine'
-
+import { applyModelTransform } from '@/lib/transformUtils'
 export function useModelLoader(engineRef: React.MutableRefObject<FragmentsEngine | null>) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const loadModel = useCallback(async (fragBytes: ArrayBuffer, modelId: string, type: 'frag' | 'glb' = 'frag', transform?: { position?: [number, number, number], rotation?: [number, number, number], scale?: [number, number, number] }) => {
+  const loadModel = useCallback(async (fragBytes: ArrayBuffer, modelId: string, type: 'frag' | 'glb' = 'frag', transform?: { position?: [number, number, number], rotation?: [number, number, number], scale?: [number, number, number] }, fitToBox: boolean = true) => {
     const engine = engineRef.current
     if (!engine) return
 
@@ -52,37 +52,21 @@ export function useModelLoader(engineRef: React.MutableRefObject<FragmentsEngine
         const hasCustomRotation = transform?.rotation && (transform.rotation[0] !== 0 || transform.rotation[1] !== 0 || transform.rotation[2] !== 0)
         const hasCustomScale = transform?.scale && (transform.scale[0] !== 1 || transform.scale[1] !== 1 || transform.scale[2] !== 1)
 
-        if (hasCustomPosition) {
-          gltf.scene.position.set(
-            gltf.scene.userData.originalPosition.x + transform!.position![0],
-            gltf.scene.userData.originalPosition.y + transform!.position![1],
-            gltf.scene.userData.originalPosition.z + transform!.position![2]
-          )
-        }
-        if (hasCustomRotation) {
-          gltf.scene.rotation.set(
-            gltf.scene.userData.originalRotation.x + transform!.rotation![0],
-            gltf.scene.userData.originalRotation.y + transform!.rotation![1],
-            gltf.scene.userData.originalRotation.z + transform!.rotation![2]
-          )
-        }
-        if (hasCustomScale) {
-          gltf.scene.scale.set(
-            gltf.scene.userData.originalScale.x * transform!.scale![0],
-            gltf.scene.userData.originalScale.y * transform!.scale![1],
-            gltf.scene.userData.originalScale.z * transform!.scale![2]
-          )
+        if (hasCustomPosition || hasCustomRotation || hasCustomScale) {
+          applyModelTransform(gltf.scene, transform!)
         } else {
           useModelStore.getState().updateModelTransform(modelId, { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] })
         }
         engine.world.scene.three.add(gltf.scene)
 
-        try {
-          const box = new Box3().setFromObject(gltf.scene)
-          if (!box.isEmpty()) {
-            await engine.world.camera.controls.fitToBox(box, true)
+        if (fitToBox) {
+          try {
+            const box = new Box3().setFromObject(gltf.scene)
+            if (!box.isEmpty()) {
+              await engine.world.camera.controls.fitToBox(box, true)
+            }
+          } catch {
           }
-        } catch {
         }
       } else {
         const existing = engine.fragments.models.list.get(modelId)
@@ -100,26 +84,8 @@ export function useModelLoader(engineRef: React.MutableRefObject<FragmentsEngine
         const hasCustomRotation = transform?.rotation && (transform.rotation[0] !== 0 || transform.rotation[1] !== 0 || transform.rotation[2] !== 0)
         const hasCustomScale = transform?.scale && (transform.scale[0] !== 1 || transform.scale[1] !== 1 || transform.scale[2] !== 1)
 
-        if (hasCustomPosition) {
-          model.object.position.set(
-            model.object.userData.originalPosition.x + transform!.position![0],
-            model.object.userData.originalPosition.y + transform!.position![1],
-            model.object.userData.originalPosition.z + transform!.position![2]
-          )
-        }
-        if (hasCustomRotation) {
-          model.object.rotation.set(
-            model.object.userData.originalRotation.x + transform!.rotation![0],
-            model.object.userData.originalRotation.y + transform!.rotation![1],
-            model.object.userData.originalRotation.z + transform!.rotation![2]
-          )
-        }
-        if (hasCustomScale) {
-          model.object.scale.set(
-            model.object.userData.originalScale.x * transform!.scale![0],
-            model.object.userData.originalScale.y * transform!.scale![1],
-            model.object.userData.originalScale.z * transform!.scale![2]
-          )
+        if (hasCustomPosition || hasCustomRotation || hasCustomScale) {
+          applyModelTransform(model.object, transform!)
         } else {
           // Initialize state with 0 offsets
           useModelStore.getState().updateModelTransform(modelId, { position: [0,0,0], rotation: [0,0,0], scale: [1,1,1] })
@@ -128,12 +94,14 @@ export function useModelLoader(engineRef: React.MutableRefObject<FragmentsEngine
         engine.world.scene.three.add(model.object)
         await engine.fragments.update(true)
 
-        try {
-          const box = new Box3().setFromObject(model.object)
-          if (!box.isEmpty()) {
-            await engine.world.camera.controls.fitToBox(box, true)
+        if (fitToBox) {
+          try {
+            const box = new Box3().setFromObject(model.object)
+            if (!box.isEmpty()) {
+              await engine.world.camera.controls.fitToBox(box, true)
+            }
+          } catch {
           }
-        } catch {
         }
       }
     } catch (err: any) {

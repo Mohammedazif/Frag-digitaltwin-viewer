@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { useModelStore } from '@/store/useModelStore'
 import { useProjectStore } from '@/store/useProjectStore'
-import { useAppStore } from '@/store/useAppStore'
 import type { FragmentsEngine } from '@/lib/fragmentsEngine'
+import { applyModelTransform } from '@/lib/transformUtils'
 
 interface ModelPositionPanelProps {
   engineRef: React.MutableRefObject<FragmentsEngine | null>
@@ -91,40 +91,12 @@ export function ModelPositionPanel({ engineRef, pickedCoord, onClearPickedCoord 
         (c: THREE.Object3D) => c.userData?.modelId === activeModelId
       )
       if (glbObj) {
-        glbObj.position.set(
-          glbObj.userData.originalPosition.x + pos[0],
-          glbObj.userData.originalPosition.y + pos[1],
-          glbObj.userData.originalPosition.z + pos[2]
-        )
-        glbObj.rotation.set(
-          glbObj.userData.originalRotation.x + rot[0],
-          glbObj.userData.originalRotation.y + rot[1],
-          glbObj.userData.originalRotation.z + rot[2]
-        )
-        glbObj.scale.set(
-          glbObj.userData.originalScale.x * scl[0],
-          glbObj.userData.originalScale.y * scl[1],
-          glbObj.userData.originalScale.z * scl[2]
-        )
+        applyModelTransform(glbObj, { position: pos, rotation: rot, scale: scl })
       } else {
         try {
           const fragModel = engine.fragments.models.list.get(activeModelId)
           if (fragModel?.object) {
-            fragModel.object.position.set(
-              fragModel.object.userData.originalPosition.x + pos[0],
-              fragModel.object.userData.originalPosition.y + pos[1],
-              fragModel.object.userData.originalPosition.z + pos[2]
-            )
-            fragModel.object.rotation.set(
-              fragModel.object.userData.originalRotation.x + rot[0],
-              fragModel.object.userData.originalRotation.y + rot[1],
-              fragModel.object.userData.originalRotation.z + rot[2]
-            )
-            fragModel.object.scale.set(
-              fragModel.object.userData.originalScale.x * scl[0],
-              fragModel.object.userData.originalScale.y * scl[1],
-              fragModel.object.userData.originalScale.z * scl[2]
-            )
+            applyModelTransform(fragModel.object, { position: pos, rotation: rot, scale: scl })
             await engine.fragments.update(true)
           }
         } catch { /* ignore */ }

@@ -247,44 +247,80 @@ export async function exportProjectAsZip(handle: FileSystemDirectoryHandle, meta
   const JSZip = (await import('jszip')).default
   const zip = new JSZip()
 
-  zip.file('project.json', JSON.stringify(meta, null, 2))
+  // Project metadata and models go inside backend/ so FastAPI can serve them
+  zip.file('backend/project.json', JSON.stringify(meta, null, 2))
 
   // Thumbnail
   try {
     const thumbFh = await handle.getFileHandle('thumbnail.webp')
     const thumbFile = await thumbFh.getFile()
-    zip.file('thumbnail.webp', await thumbFile.arrayBuffer())
+    zip.file('backend/thumbnail.webp', await thumbFile.arrayBuffer())
   } catch { /* no thumbnail yet */ }
 
-  // Models
+  // Models — placed inside backend/models/ so FastAPI /models/{filename} route serves them
   const modelsDir = await handle.getDirectoryHandle('models', { create: true })
-  const modelsFolder = zip.folder('models')!
+  const backendModelsFolder = zip.folder('backend/models')!
   for (const entry of meta.models) {
     const ext = entry.type === 'glb' ? 'glb' : 'frag'
     const fileName = `${entry.modelId}.${ext}`
     const bytes = await readBinary(modelsDir, fileName)
-    if (bytes) modelsFolder.file(fileName, bytes)
+    if (bytes) backendModelsFolder.file(fileName, bytes)
   }
 
-  // Include Built Viewer App
+  // Include Built Viewer App + Backend
   try {
-    const res = await fetch('/api/viewer-assets')
+    const res = await fetch('/viewer-assets.json?t=' + Date.now(), { cache: 'no-store' })
     if (res.ok) {
       const files: { path: string, content: string }[] = await res.json()
       for (const f of files) {
         if (f.path === 'index.html') continue // Skip the studio app entry
-        zip.file(f.path, f.content, { base64: true })
+        // Place all viewer static assets inside backend/static/ so FastAPI can serve them
+        zip.file(`backend/static/${f.path}`, f.content, { base64: true })
       }
-
-      // Add helper scripts to launch the viewer via local server
-      const winBat = `@echo off\necho Starting EKO Digital Twin Viewer...\nstart http://127.0.0.1:8000/viewer.html\npython -m http.server 8000 --bind 127.0.0.1 || python3 -m http.server 8000 --bind 127.0.0.1\npause`
-      // const macSh = `#!/bin/bash\necho "Starting EKO Digital Twin Viewer..."\nopen http://localhost:8000/viewer.html || xdg-open http://localhost:8000/viewer.html\npython3 -m http.server 8000 || python -m http.server 8000`
-      
-      zip.file('Start_Viewer_Windows.bat', winBat)
-      // zip.file('Start_Viewer_Mac_Linux.command', macSh)
     } else {
       console.warn("Viewer assets not bundled. You must run `npm run build` in the studio first.")
     }
+
+    // Bundle backend Python files
+    const backendFiles = [
+      { name: 'main.py', url: '/backend/main.py' },
+      { name: 'fin_client.py', url: '/backend/fin_client.py' },
+      { name: 'config.json', url: '/backend/config.json' },
+      { name: 'requirements.txt', url: '/backend/requirements.txt' },
+    ]
+    for (const bf of backendFiles) {
+      try {
+        const r = await fetch(bf.url + '?t=' + Date.now(), { cache: 'no-store' })
+        if (r.ok) {
+          const text = await r.text()
+          zip.file(`backend/${bf.name}`, text)
+        }
+      } catch { /* skip if not available */ }
+    }
+
+    // Launch script: installs deps and starts the FastAPI backend (serves viewer + API)
+    const winBat = [
+      '@echo off',
+      'echo ============================================',
+      'echo   EKO Digital Twin Viewer + FIN Backend',
+      'echo ============================================',
+      'echo.',
+      'echo Checking Python...',
+      'python --version >nul 2>&1 || (echo Python not found. Please install Python 3.10+ && pause && exit /b 1)',
+      'echo.',
+      'echo Installing backend dependencies...',
+      'cd /d "%~dp0backend"',
+      'pip install -r requirements.txt --quiet',
+      'echo.',
+      'echo Starting server on http://127.0.0.1:8000/viewer.html',
+      'echo Press Ctrl+C to stop.',
+      'echo.',
+      'start http://127.0.0.1:8000/viewer.html',
+      'python -m uvicorn main:app --host 127.0.0.1 --port 8000',
+      'pause',
+    ].join('\r\n')
+
+    zip.file('Start_Viewer_Windows.bat', winBat)
   } catch (err) {
     console.error("Failed to include viewer assets in zip", err)
   }

@@ -2,6 +2,7 @@
 FIN Connector Backend — FastAPI Server
 Template-based: all project-specific values come from config.json.
 Exposes REST API for the React frontend to consume.
+Also serves the compiled viewer app from the 'static/' directory.
 """
 
 import asyncio
@@ -14,6 +15,8 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from fin_client import FinScramClient, parse_custom_response, aggregate_and_restructure
@@ -339,3 +342,56 @@ async def get_config():
         "server_url": FIN_SERVER_URL,
         "display_name": CONFIG.get("display_name", PROJECT_NAME),
     }
+
+
+# ─── Static Viewer App ────────────────────────────────────────────────────────
+
+BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+STATIC_DIR = os.path.join(BACKEND_DIR, "static")
+MODELS_DIR = os.path.join(BACKEND_DIR, "models")
+PROJECT_JSON = os.path.join(BACKEND_DIR, "project.json")
+
+
+@app.get("/project.json")
+async def serve_project_json():
+    """Serve the project.json for the standalone viewer."""
+    if os.path.exists(PROJECT_JSON):
+        return FileResponse(PROJECT_JSON, media_type="application/json")
+    raise HTTPException(status_code=404, detail="project.json not found")
+
+
+@app.get("/thumbnail.webp")
+async def serve_thumbnail():
+    """Serve the project thumbnail."""
+    thumb = os.path.join(BACKEND_DIR, "thumbnail.webp")
+    if os.path.exists(thumb):
+        return FileResponse(thumb, media_type="image/webp")
+    raise HTTPException(status_code=404, detail="thumbnail not found")
+
+
+@app.get("/models/{filename:path}")
+async def serve_model(filename: str):
+    """Serve model files (.frag / .glb) from the backend/models/ directory."""
+    safe = os.path.normpath(filename)
+    model_path = os.path.join(MODELS_DIR, safe)
+    # Prevent path traversal
+    if not model_path.startswith(MODELS_DIR):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if os.path.exists(model_path):
+        media = "model/gltf-binary" if model_path.endswith(".glb") else "application/octet-stream"
+        return FileResponse(model_path, media_type=media)
+    raise HTTPException(status_code=404, detail=f"Model {filename} not found")
+
+
+@app.get("/")
+@app.get("/viewer.html")
+async def serve_viewer():
+    """Serve the viewer SPA entry point."""
+    viewer_path = os.path.join(STATIC_DIR, "viewer.html")
+    if os.path.exists(viewer_path):
+        return FileResponse(viewer_path, media_type="text/html")
+    return {"error": "Viewer not found. Make sure static/ folder is present."}
+
+
+if os.path.exists(STATIC_DIR):
+    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

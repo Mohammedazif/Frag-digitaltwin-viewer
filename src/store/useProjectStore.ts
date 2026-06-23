@@ -43,6 +43,7 @@ interface ProjectState {
   removeModelEntry: (modelId: string) => Promise<void>
   updateModelTransform: (modelId: string, transform: { position?: [number, number, number], rotation?: [number, number, number], scale?: [number, number, number] }) => Promise<void>
   updateThumbnail: (dataUrl: string) => Promise<void>
+  saveViewAndSettings: (camera: import('@/types').ProjectCamera, renderSettings: import('@/types').ProjectRenderSettings) => Promise<void>
   setDirty: (dirty: boolean) => void
 }
 
@@ -231,6 +232,20 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     if (!folderHandle || !currentProject) return
     await saveThumbnailToProject(folderHandle, dataUrl)
     const updated = { ...currentProject, thumbnail: dataUrl }
+    
+    const updatedRecent = recentProjects.map(r => 
+      r.meta.projectId === updated.projectId ? { ...r, meta: updated } : r
+    )
+    
+    set({ currentProject: updated, recentProjects: updatedRecent })
+  },
+
+  saveViewAndSettings: async (camera, renderSettings) => {
+    const { folderHandle, currentProject, recentProjects } = get()
+    if (!folderHandle || !currentProject) return
+    const updated = { ...currentProject, camera, renderSettings }
+    await saveProjectMeta(folderHandle, updated)
+    await cacheHandle(updated.projectId, folderHandle, updated, (updated as any).thumbnail)
     
     const updatedRecent = recentProjects.map(r => 
       r.meta.projectId === updated.projectId ? { ...r, meta: updated } : r

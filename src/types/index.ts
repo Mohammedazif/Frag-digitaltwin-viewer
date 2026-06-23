@@ -38,6 +38,22 @@ export interface ProjectModelEntry {
   scale?: [number, number, number]
 }
 
+export interface ProjectCamera {
+  position: [number, number, number]
+  target: [number, number, number]
+}
+
+export interface ProjectRenderSettings {
+  realisticMode: boolean
+  exposure: number
+  lightIntensity: number
+  ambientIntensity: number
+  timeOfDay: number
+  bloomStrength: number
+  bloomThreshold: number
+  fogDensity: number
+}
+
 export interface ProjectMeta {
   version: number
   projectId: string
@@ -52,6 +68,8 @@ export interface ProjectMeta {
     altitude: number
     rotation: number
   } | null
+  camera?: ProjectCamera
+  renderSettings?: ProjectRenderSettings
 }
 
 export interface ProjectModel extends ProjectModelEntry {

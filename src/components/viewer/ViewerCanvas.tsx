@@ -11,9 +11,10 @@ import type { FragmentsEngine } from '@/lib/fragmentsEngine'
 
 interface ViewerCanvasProps {
   onEngineReady?: (engineRef: React.MutableRefObject<FragmentsEngine | null>) => void
+  adminMode?: boolean
 }
 
-export function ViewerCanvas({ onEngineReady }: ViewerCanvasProps) {
+export function ViewerCanvas({ onEngineReady, adminMode = true }: ViewerCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const statsRef = useRef<any>(null)
   const statsContainerRef = useRef<HTMLDivElement>(null)
@@ -59,7 +60,7 @@ export function ViewerCanvas({ onEngineReady }: ViewerCanvasProps) {
           position: model.position,
           rotation: model.rotation,
           scale: model.scale,
-        })
+        }, adminMode) // only auto-fit camera if we are in admin mode (studio)
       }
     })
   }, [models, isReady])
@@ -154,8 +155,8 @@ export function ViewerCanvas({ onEngineReady }: ViewerCanvasProps) {
         />
       )}
 
-      {/* Right side panels */}
-      {step === 'viewing' && (
+      {/* Right side panels — admin only */}
+      {step === 'viewing' && adminMode && (
         <div className="right-panels-container">
           <RenderPanel />
           <ModelPositionPanel 

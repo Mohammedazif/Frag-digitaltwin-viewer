@@ -9,7 +9,7 @@ function viewerAssetsPlugin() {
   return {
     name: 'viewer-assets',
     configureServer(server: any) {
-      server.middlewares.use('/api/viewer-assets', (_req: any, res: any) => {
+      server.middlewares.use('/viewer-assets.json', (_req: any, res: any) => {
         const distPath = path.resolve(__dirname, 'dist')
         if (!fs.existsSync(distPath)) {
           res.statusCode = 404
@@ -24,6 +24,7 @@ function viewerAssetsPlugin() {
             if (fs.statSync(itemPath).isDirectory()) {
               walk(itemPath, path.join(base, item))
             } else {
+              if (item === 'viewer-assets.json') continue;
               const content = fs.readFileSync(itemPath, 'base64')
               files.push({ path: path.join(base, item).replace(/\\/g, '/'), content })
             }
@@ -33,12 +34,55 @@ function viewerAssetsPlugin() {
         res.setHeader('Content-Type', 'application/json')
         res.end(JSON.stringify(files))
       })
+    },
+    closeBundle() {
+      const distPath = path.resolve(__dirname, 'dist')
+      if (!fs.existsSync(distPath)) return
+      const outPath = path.join(distPath, 'viewer-assets.json')
+      
+      const files: { path: string, content: string }[] = []
+      function walk(dir: string, base: string) {
+        for (const item of fs.readdirSync(dir)) {
+          const itemPath = path.join(dir, item)
+          if (fs.statSync(itemPath).isDirectory()) {
+            walk(itemPath, path.join(base, item))
+          } else {
+            if (item === 'viewer-assets.json') continue;
+            const content = fs.readFileSync(itemPath, 'base64')
+            files.push({ path: path.join(base, item).replace(/\\/g, '/'), content })
+          }
+        }
+      }
+      walk(distPath, '')
+      fs.writeFileSync(outPath, JSON.stringify(files))
+    }
+  }
+}
+
+function backendFilesPlugin() {
+  const backendPath = path.resolve(__dirname, 'backend')
+  return {
+    name: 'backend-files',
+    configureServer(server: any) {
+      server.middlewares.use('/backend', (req: any, res: any, next: any) => {
+        // Strip query string and decode
+        const rawUrl: string = req.url || ''
+        const urlPath = rawUrl.split('?')[0]
+        const filePath = path.join(backendPath, urlPath)
+        if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+          const content = fs.readFileSync(filePath, 'utf-8')
+          res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+          res.end(content)
+        } else {
+          next()
+        }
+      })
     }
   }
 }
 
 export default defineConfig({
-  plugins: [react(), wasm(), topLevelAwait(), viewerAssetsPlugin()],
+  plugins: [react(), wasm(), topLevelAwait(), viewerAssetsPlugin(), backendFilesPlugin()],
   server: {
     proxy: {
       '/api/fin': {
