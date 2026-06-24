@@ -7,6 +7,7 @@ import { useAppStore } from '@/store/useAppStore'
 import { ViewerToolbar } from './ViewerToolbar'
 import { ModelPositionPanel } from '@/components/viewer/ModelPositionPanel'
 import { RenderPanel } from '@/components/viewer/RenderPanel'
+import { DashboardOverlay } from '@/components/viewer/DashboardOverlay'
 import type { FragmentsEngine } from '@/lib/fragmentsEngine'
 
 interface ViewerCanvasProps {
@@ -20,6 +21,7 @@ export function ViewerCanvas({ onEngineReady, adminMode = true }: ViewerCanvasPr
   const statsContainerRef = useRef<HTMLDivElement>(null)
   const [statsVisible, setStatsVisible] = useState(false)
   const [pickerActive, setPickerActive] = useState(false)
+  const [dashboardVisible, setDashboardVisible] = useState(false)
   const [pickedCoord, setPickedCoord] = useState<[number, number, number] | null>(null)
 
   const { engineRef, isReady, error } = useFragmentsEngine(containerRef)
@@ -144,6 +146,11 @@ export function ViewerCanvas({ onEngineReady, adminMode = true }: ViewerCanvasPr
       {/* Stats overlay */}
       <div ref={statsContainerRef} className="stats-overlay" />
 
+      {/* Dashboard Overlay */}
+      {step === 'viewing' && (
+        <DashboardOverlay visible={dashboardVisible} />
+      )}
+
       {/* Toolbar */}
       {step === 'viewing' && (
         <ViewerToolbar
@@ -152,6 +159,8 @@ export function ViewerCanvas({ onEngineReady, adminMode = true }: ViewerCanvasPr
           statsVisible={statsVisible}
           pickerActive={pickerActive}
           onTogglePicker={() => setPickerActive(v => !v)}
+          dashboardVisible={dashboardVisible}
+          onToggleDashboard={() => setDashboardVisible(v => !v)}
         />
       )}
 

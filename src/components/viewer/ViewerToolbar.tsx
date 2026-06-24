@@ -9,11 +9,13 @@ interface ViewerToolbarProps {
   statsVisible: boolean
   pickerActive: boolean
   onTogglePicker: () => void
+  dashboardVisible: boolean
+  onToggleDashboard: () => void
 }
 
 import { useState, useEffect } from 'react'
 
-export function ViewerToolbar({ engineRef, onToggleStats, statsVisible, pickerActive, onTogglePicker }: ViewerToolbarProps) {
+export function ViewerToolbar({ engineRef, onToggleStats, statsVisible, pickerActive, onTogglePicker, dashboardVisible, onToggleDashboard }: ViewerToolbarProps) {
   const engine = engineRef.current
   const [gridActive, setGridActive] = useState(false)
 
@@ -157,6 +159,16 @@ export function ViewerToolbar({ engineRef, onToggleStats, statsVisible, pickerAc
       icon: (
         <svg viewBox="0 0 20 20" fill="currentColor" width="15" height="15">
           <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/>
+        </svg>
+      ),
+    },
+    {
+      title: dashboardVisible ? 'Hide Dashboard' : 'Show Dashboard',
+      action: onToggleDashboard,
+      active: dashboardVisible,
+      icon: (
+        <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+          <path d="M4 13h6c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v8c0 .55.45 1 1 1zm0 8h6c.55 0 1-.45 1-1v-4c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v4c0 .55.45 1 1 1zm10 0h6c.55 0 1-.45 1-1v-8c0-.55-.45-1-1-1h-6c-.55 0-1 .45-1 1v8c0 .55.45 1 1 1zM13 4v4c0 .55.45 1 1 1h6c.55 0 1-.45 1-1V4c0-.55-.45-1-1-1h-6c-.55 0-1 .45-1 1z"/>
         </svg>
       ),
     },
