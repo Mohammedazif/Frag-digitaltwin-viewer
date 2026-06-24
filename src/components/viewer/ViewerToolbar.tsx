@@ -1,6 +1,7 @@
 import type { FragmentsEngine } from '@/lib/fragmentsEngine'
 import * as OBC from '@thatopen/components'
 import * as THREE from 'three'
+import { useProjectStore } from '@/store/useProjectStore'
 
 interface ViewerToolbarProps {
   engineRef: React.MutableRefObject<FragmentsEngine | null>
@@ -56,13 +57,61 @@ export function ViewerToolbar({ engineRef, onToggleStats, statsVisible, pickerAc
     }
     setGridActive(newState)
   }
-
   const resetCamera = () => {
     if (!engine) return
-    engine.world.camera.controls.setLookAt(50, 30, 50, 0, 0, 0, true)
+    const camera = useProjectStore.getState().currentProject?.camera
+    if (camera) {
+      const pos = camera.position as any
+      const tgt = camera.target as any
+      
+      const px = Array.isArray(pos) ? pos[0] : pos.x
+      const py = Array.isArray(pos) ? pos[1] : pos.y
+      const pz = Array.isArray(pos) ? pos[2] : pos.z
+      
+      const tx = Array.isArray(tgt) ? tgt[0] : tgt.x
+      const ty = Array.isArray(tgt) ? tgt[1] : tgt.y
+      const tz = Array.isArray(tgt) ? tgt[2] : tgt.z
+
+      engine.world.camera.controls.setLookAt(px, py, pz, tx, ty, tz, true)
+    } else {
+      engine.world.camera.controls.setLookAt(50, 30, 50, 0, 0, 0, true)
+    }
+  }
+
+  const [isFullscreen, setIsFullscreen] = useState(false)
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+    }
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  }, [])
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      const container = document.querySelector('.viewer-canvas-wrapper')
+      if (container) container.requestFullscreen().catch(e => console.warn(e))
+    } else {
+      if (document.exitFullscreen) document.exitFullscreen()
+    }
   }
 
   const tools = [
+    {
+      title: isFullscreen ? 'Exit Fullscreen' : 'Fullscreen',
+      action: toggleFullscreen,
+      active: isFullscreen,
+      icon: isFullscreen ? (
+        <svg viewBox="0 0 20 20" fill="currentColor" width="15" height="15">
+          <path d="M5 8h2v2H5V8zm2-3H5v2h2V5zm6 0h-2v2h2V5zm0 5h-2v2h2v-2zM3 3h14v14H3V3z" fillRule="evenodd" clipRule="evenodd"/>
+        </svg>
+      ) : (
+        <svg viewBox="0 0 20 20" fill="currentColor" width="15" height="15">
+          <path d="M3 3h4v2H5v2H3V3zm14 0h-4v2h2v2h2V3zM3 17h4v-2H5v-2H3v4zm14 0h-4v-2h2v-2h2v4z"/>
+        </svg>
+      ),
+    },
     {
       title: 'Fit View',
       action: fitView,
