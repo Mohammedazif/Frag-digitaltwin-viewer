@@ -133,14 +133,19 @@ async def polling_loop():
             }
 
             # 7. Build building info
+            facility_services = _compute_facility_services(realtime)
             cached_building_data = {
                 "status": "success",
                 "Building_Info": {
                     "timestamp": datetime.now().isoformat(),
                     "Equipments": realtime,
                     "buildingPowerUsageHistory": power_hist,
+                    "facilityServices": facility_services,
                 },
             }
+            
+            # Also add facility_services directly to power_data for easier frontend consumption
+            cached_power_data["facilityServices"] = facility_services
 
             print(f"[FIN] ✓ Data refreshed at {datetime.now().strftime('%H:%M:%S')}")
             await asyncio.sleep(30)
@@ -202,6 +207,74 @@ def _compute_sensor_averages(realtime: dict):
         cached_sensor_avg["humidity"] = round(sum(hum_vals) / len(hum_vals), 2)
     if co2_vals:
         cached_sensor_avg["co2"] = round(sum(co2_vals) / len(co2_vals), 2)
+
+
+def _compute_facility_services(realtime: dict) -> dict:
+    """Calculate facility services metrics from realtime equipment data."""
+    total_alarms = 0
+    total_faults = 0
+    total_maintenance = 0
+    total_equipment = 0
+    online_equipment = 0
+
+    for floor_name, floor_data in realtime.items():
+        if not isinstance(floor_data, dict):
+            continue
+        hvac_list = floor_data.get('hvac', [])
+        for equipment in hvac_list:
+            if not isinstance(equipment, dict):
+                continue
+            
+            total_equipment += 1
+            points = equipment.get('points', [])
+            equipment_alarms = equipment.get('alarms', [])
+            has_connectivity = len(points) > 0
+            is_faulty = False
+            
+            if isinstance(equipment_alarms, list) and len(equipment_alarms) > 0:
+                total_alarms += len(equipment_alarms)
+            
+            for point in points:
+                if not isinstance(point, dict):
+                    continue
+                p_name = str(point.get('navName', '')).lower()
+                p_val = str(point.get('currentValue', '')).lower()
+                p_status = str(point.get('status', '')).lower()
+                
+                is_ticket = any(k in p_val for k in ['alarm', 'failure', 'broken', 'stuck', 'slippage', 'seizure', 'fault', 'error'])
+                if is_ticket:
+                    total_alarms += 1
+                    is_faulty = True
+                
+                is_issue = any(k in p_val for k in ['calibration', 'no response', 'working']) or p_status != 'ok'
+                if is_ticket:
+                    is_issue = False
+
+                if is_issue:
+                    total_faults += 1
+                    if p_status != 'ok':
+                        is_faulty = True
+                
+                if ('maintenance' in p_val or 'maint' in p_name or 'manual' in p_val) and 'maintaining setpoint' not in p_val:
+                    total_maintenance += 1
+            
+            if has_connectivity and not is_faulty:
+                online_equipment += 1
+            elif 'online' in str(equipment.get('equipStatus', '')).lower():
+                online_equipment += 1
+    
+    uptime = 99.8
+    if total_equipment > 0:
+        uptime = (online_equipment / total_equipment) * 100
+        
+    return {
+        'openTickets': total_alarms,
+        'openIssues': total_faults,
+        'maintenance': total_maintenance,
+        'avgUptime': round(uptime, 1),
+        'totalEquipment': total_equipment,
+        'onlineEquipment': online_equipment
+    }
 
 
 # ─── FastAPI App ─────────────────────────────────────────────────────────────

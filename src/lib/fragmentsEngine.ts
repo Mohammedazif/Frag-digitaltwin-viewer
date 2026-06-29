@@ -1,4 +1,5 @@
 import * as FRAGS from '@thatopen/fragments'
+import { CloudShader } from './CloudShader'
 import * as OBC from '@thatopen/components'
 import * as THREE from 'three'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
@@ -9,6 +10,9 @@ import { SSAOPass } from 'three/examples/jsm/postprocessing/SSAOPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
+import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass.js'
+import { ColorGradeShader } from './ColorGradeShader'
 import * as SunCalc from 'suncalc'
 
 export interface FragmentsEngine {
@@ -16,7 +20,7 @@ export interface FragmentsEngine {
   world: any
   components: OBC.Components
   dispose: () => Promise<void>
-  setLightingParams: (params: { realisticMode: boolean, exposure: number, lightIntensity: number, ambientIntensity: number, timeOfDay: number, bloomStrength: number, bloomThreshold: number, fogDensity: number }) => void
+  setLightingParams: (params: { realisticMode: boolean, exposure: number, lightIntensity: number, ambientIntensity: number, timeOfDay: number, bloomStrength: number, bloomThreshold: number, fogDensity: number, cloudDensity: number, cloudSpeed: number, dofEnabled: boolean, dofFocus: number, dofAperture: number, dofMaxBlur: number, visualSaturation?: number, visualTemperature?: number, visualContrast?: number, visualVignette?: number }) => void
 }
 
 export async function initFragmentsEngine(
@@ -63,49 +67,97 @@ export async function initFragmentsEngine(
   rDir.position.set(500, 1000, 500)
   rDir.castShadow = true
   
-  // Increase map size for better resolution over large area
+  // Keep map size high but tighten the frustum for crisp shadows
   rDir.shadow.mapSize.width = 4096
   rDir.shadow.mapSize.height = 4096
   rDir.shadow.camera.near = 10
-  rDir.shadow.camera.far = 10000
-  rDir.shadow.camera.left = -2000
-  rDir.shadow.camera.right = 2000
-  rDir.shadow.camera.top = 2000
-  rDir.shadow.camera.bottom = -2000
-  rDir.shadow.bias = -0.005
-  rDir.shadow.normalBias = 0.1
+  rDir.shadow.camera.far = 20000
+  rDir.shadow.camera.left = -5000
+  rDir.shadow.camera.right = 5000
+  rDir.shadow.camera.top = 5000
+  rDir.shadow.camera.bottom = -5000
+  rDir.shadow.bias = -0.0005
+  rDir.shadow.normalBias = 0.05
+
+  // Clouds (Procedural Shader Dome)
+  const cloudGeo = new THREE.SphereGeometry(190000, 64, 64)
+  const cloudMat = new THREE.ShaderMaterial({
+    uniforms: THREE.UniformsUtils.clone(CloudShader.uniforms),
+    vertexShader: CloudShader.vertexShader,
+    fragmentShader: CloudShader.fragmentShader,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.BackSide,
+    blending: THREE.NormalBlending
+  })
   
-  realisticGroup.add(sky, rAmbient, rDir)
+  const cloudsDome = new THREE.Mesh(cloudGeo, cloudMat)
+  
+  realisticGroup.add(sky, rAmbient, rDir, cloudsDome)
   world.scene.three.add(realisticGroup)
 
   let isRealistic = false
   let bloomPass: UnrealBloomPass
-  const setLightingParams = (params: { realisticMode: boolean, exposure: number, lightIntensity: number, ambientIntensity: number, timeOfDay: number, bloomStrength: number, bloomThreshold: number, fogDensity: number }) => {
+  let currentCloudSpeed = 1.0
+  let bokehPass: any
+  let ssaoPass: any
+  let colorGradePass: any
+
+  const setLightingParams = (params: { realisticMode: boolean, exposure: number, lightIntensity: number, ambientIntensity: number, timeOfDay: number, bloomStrength: number, bloomThreshold: number, fogDensity: number, cloudDensity: number, cloudSpeed: number, dofEnabled: boolean, dofFocus: number, dofAperture: number, dofMaxBlur: number, visualSaturation?: number, visualTemperature?: number, visualContrast?: number, visualVignette?: number }) => {
     isRealistic = params.realisticMode
+    cloudMat.uniforms.cloudDensity.value = params.cloudDensity
+    currentCloudSpeed = params.cloudSpeed
+    cloudsDome.visible = params.cloudDensity > 0
+    
+    if (bokehPass) {
+      bokehPass.enabled = params.dofEnabled
+      if (params.dofFocus !== undefined) bokehPass.uniforms['focus'].value = params.dofFocus
+      if (params.dofAperture !== undefined) bokehPass.uniforms['aperture'].value = params.dofAperture
+      if (params.dofMaxBlur !== undefined) bokehPass.uniforms['maxblur'].value = params.dofMaxBlur
+    }
+    
+    if (ssaoPass) {
+      ssaoPass.enabled = params.realisticMode
+    }
+    
+    if (colorGradePass) {
+      colorGradePass.enabled = params.realisticMode
+      if (params.visualSaturation !== undefined) colorGradePass.uniforms.saturation.value = params.visualSaturation
+      if (params.visualTemperature !== undefined) colorGradePass.uniforms.temperature.value = params.visualTemperature
+      if (params.visualContrast !== undefined) colorGradePass.uniforms.contrast.value = params.visualContrast
+      if (params.visualVignette !== undefined) colorGradePass.uniforms.vignette.value = params.visualVignette
+    }
 
     if (params.realisticMode) {
       // Upgrade Lambert materials to Standard for PBR reflections
       world.scene.three.traverse((child: any) => {
-        if (child.isMesh && child.material) {
-          const convert = (mat: any) => {
-            if (mat.isMeshLambertMaterial && !mat.userData.isUpgraded) {
+        if (child.isMesh) {
+          child.castShadow = true
+          child.receiveShadow = true
+          
+          if (child.material) {
+            const convert = (mat: any) => {
+            if ((mat.isMeshLambertMaterial || mat.isMeshBasicMaterial || mat.isMeshPhongMaterial) && !mat.userData.isUpgraded) {
               const newMat = new THREE.MeshStandardMaterial({
                 color: mat.color,
                 roughness: 0.8,
                 metalness: 0.1,
                 side: mat.side,
                 transparent: mat.transparent,
-                opacity: mat.opacity
+                opacity: mat.opacity,
+                map: mat.map || null
               })
               newMat.userData.isUpgraded = true
+
               return newMat
             }
             return mat
           }
           if (Array.isArray(child.material)) {
             child.material = child.material.map(convert)
-          } else {
-            child.material = convert(child.material)
+            } else {
+              child.material = convert(child.material)
+            }
           }
         }
       })
@@ -124,12 +176,17 @@ export async function initFragmentsEngine(
       const theta = azimuthRad + Math.PI / 2
       
       const sunPosition = new THREE.Vector3()
-      sunPosition.setFromSphericalCoords(1000, phi, theta)
+      sunPosition.setFromSphericalCoords(10000, phi, theta)
       sky.material.uniforms['sunPosition'].value.copy(sunPosition)
-      rDir.position.copy(sunPosition)
+      
+      // We don't set rDir position here because we will update it in the render loop to follow the camera
+      rDir.userData.sunOffset = sunPosition.clone()
+      
+      cloudMat.uniforms.sunPosition.value.copy(sunPosition)
 
       world.renderer.three.shadowMap.enabled = true
       world.renderer.three.shadowMap.type = THREE.PCFSoftShadowMap
+      world.renderer.three.shadowMap.autoUpdate = true
       world.renderer.three.toneMapping = THREE.ACESFilmicToneMapping
       world.renderer.three.toneMappingExposure = params.exposure
       world.scene.three.environment = envTexture
@@ -145,6 +202,11 @@ export async function initFragmentsEngine(
       realisticGroup.visible = true
       rDir.intensity = params.lightIntensity
       rAmbient.intensity = params.ambientIntensity
+
+      // Add directional light target to scene so it updates correctly
+      if (rDir.target.parent !== world.scene.three) {
+        world.scene.three.add(rDir.target)
+      }
 
       world.scene.three.traverse((child: any) => {
         if ((child.isDirectionalLight || child.isAmbientLight) && child.parent !== realisticGroup) {
@@ -174,7 +236,7 @@ export async function initFragmentsEngine(
     })
   }
 
-  setLightingParams({ realisticMode: false, exposure: 0.85, lightIntensity: 1.2, ambientIntensity: 0.3, timeOfDay: 14.5, bloomStrength: 0.15, bloomThreshold: 1.5, fogDensity: 0.00015 })
+  setLightingParams({ realisticMode: false, exposure: 0.85, lightIntensity: 1.2, ambientIntensity: 0.3, timeOfDay: 14.5, bloomStrength: 0.15, bloomThreshold: 1.5, fogDensity: 0.00015, cloudDensity: 0.5, cloudSpeed: 1.0, dofEnabled: false, dofFocus: 2000.0, dofAperture: 0.0001, dofMaxBlur: 0.01 })
 
   world.camera = new OBC.SimpleCamera(components)
 
@@ -200,17 +262,49 @@ export async function initFragmentsEngine(
   const renderPass = new RenderPass(world.scene.three, world.camera.three)
   composer.addPass(renderPass)
 
+  ssaoPass = new SSAOPass(world.scene.three, world.camera.three, window.innerWidth, window.innerHeight)
+  ssaoPass.kernelRadius = 16
+  ssaoPass.minDistance = 0.001
+  ssaoPass.maxDistance = 0.1
+  ssaoPass.enabled = false
+  composer.addPass(ssaoPass)
+
+  colorGradePass = new ShaderPass(ColorGradeShader)
+  colorGradePass.enabled = false
+  composer.addPass(colorGradePass)
+
   const outputPass = new OutputPass()
   composer.addPass(outputPass)
 
   const smaaPass = new SMAAPass()
   smaaPass.setSize(window.innerWidth * window.devicePixelRatio, window.innerHeight * window.devicePixelRatio)
   composer.addPass(smaaPass)
+  
+  bokehPass = new BokehPass(world.scene.three, world.camera.three, {
+    focus: 2000.0,
+    aperture: 0.0001,
+    maxblur: 0.01
+  })
+  bokehPass.enabled = false
+  composer.addPass(bokehPass)
 
+  const clock = new THREE.Clock()
   const defaultUpdate = world.renderer.update.bind(world.renderer)
   world.renderer.update = () => {
+    const delta = clock.getDelta()
     if (isRealistic) {
       if (!world.renderer.enabled || !world.renderer.currentWorld) return
+      
+      cloudMat.uniforms.time.value += delta * currentCloudSpeed
+      
+      if (rDir.userData.sunOffset && world.camera.controls) {
+        const target = new THREE.Vector3()
+        world.camera.controls.getTarget(target)
+        rDir.target.position.copy(target)
+        rDir.position.copy(target).add(rDir.userData.sunOffset)
+        rDir.shadow.camera.updateProjectionMatrix()
+      }
+      
       world.renderer.needsUpdate = false
       world.renderer.onBeforeUpdate.trigger(world.renderer)
       composer.render()
@@ -227,6 +321,9 @@ export async function initFragmentsEngine(
     }
     composer.setSize(size.x, size.y)
     smaaPass.setSize(size.x * window.devicePixelRatio, size.y * window.devicePixelRatio)
+    if (ssaoPass) {
+      ssaoPass.setSize(size.x, size.y)
+    }
   })
 
   components.init()
@@ -245,6 +342,17 @@ export async function initFragmentsEngine(
       material.polygonOffset = true
       material.polygonOffsetUnits = 1
       material.polygonOffsetFactor = Math.random()
+    }
+  })
+  
+  fragments.models.list.onItemSet.add(({ value: model }: any) => {
+    if (isRealistic) {
+      model.traverse?.((child: any) => {
+        if (child.isMesh) {
+          child.castShadow = true
+          child.receiveShadow = true
+        }
+      })
     }
   })
 

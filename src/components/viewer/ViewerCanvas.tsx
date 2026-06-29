@@ -36,6 +36,16 @@ export function ViewerCanvas({ onEngineReady, adminMode = true }: ViewerCanvasPr
   const bloomStrength = useAppStore(s => s.bloomStrength)
   const bloomThreshold = useAppStore(s => s.bloomThreshold)
   const fogDensity = useAppStore(s => s.fogDensity)
+  const cloudDensity = useAppStore(s => s.cloudDensity)
+  const cloudSpeed = useAppStore(s => s.cloudSpeed)
+  const dofEnabled = useAppStore(s => s.dofEnabled)
+  const dofFocus = useAppStore(s => s.dofFocus)
+  const dofAperture = useAppStore(s => s.dofAperture)
+  const dofMaxBlur = useAppStore(s => s.dofMaxBlur)
+  const visualSaturation = useAppStore(s => s.visualSaturation)
+  const visualTemperature = useAppStore(s => s.visualTemperature)
+  const visualContrast = useAppStore(s => s.visualContrast)
+  const visualVignette = useAppStore(s => s.visualVignette)
 
   useEffect(() => {
     if (isReady && onEngineReady) onEngineReady(engineRef)
@@ -43,9 +53,9 @@ export function ViewerCanvas({ onEngineReady, adminMode = true }: ViewerCanvasPr
 
   useEffect(() => {
     if (isReady && engineRef.current) {
-      engineRef.current.setLightingParams({ realisticMode, exposure, lightIntensity, ambientIntensity, timeOfDay, bloomStrength, bloomThreshold, fogDensity })
+      engineRef.current.setLightingParams({ realisticMode, exposure, lightIntensity, ambientIntensity, timeOfDay, bloomStrength, bloomThreshold, fogDensity, cloudDensity, cloudSpeed, dofEnabled, dofFocus, dofAperture, dofMaxBlur, visualSaturation, visualTemperature, visualContrast, visualVignette })
     }
-  }, [realisticMode, exposure, lightIntensity, ambientIntensity, timeOfDay, bloomStrength, bloomThreshold, fogDensity, isReady])
+  }, [realisticMode, exposure, lightIntensity, ambientIntensity, timeOfDay, bloomStrength, bloomThreshold, fogDensity, cloudDensity, cloudSpeed, dofEnabled, dofFocus, dofAperture, dofMaxBlur, visualSaturation, visualTemperature, visualContrast, visualVignette, isReady])
 
   const loadedIdsRef = useRef<Set<string>>(new Set())
 

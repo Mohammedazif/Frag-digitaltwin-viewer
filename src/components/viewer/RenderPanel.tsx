@@ -10,6 +10,16 @@ export function RenderPanel() {
   const bloomStrength = useAppStore(s => s.bloomStrength)
   const bloomThreshold = useAppStore(s => s.bloomThreshold)
   const fogDensity = useAppStore(s => s.fogDensity)
+  const cloudDensity = useAppStore(s => s.cloudDensity)
+  const cloudSpeed = useAppStore(s => s.cloudSpeed)
+  const dofEnabled = useAppStore(s => s.dofEnabled)
+  const dofFocus = useAppStore(s => s.dofFocus)
+  const dofAperture = useAppStore(s => s.dofAperture)
+  const dofMaxBlur = useAppStore(s => s.dofMaxBlur)
+  const visualSaturation = useAppStore(s => s.visualSaturation)
+  const visualTemperature = useAppStore(s => s.visualTemperature)
+  const visualContrast = useAppStore(s => s.visualContrast)
+  const visualVignette = useAppStore(s => s.visualVignette)
   const setRealisticMode = useAppStore(s => s.setRealisticMode)
   const setLightingParams = useAppStore(s => s.setLightingParams)
 
@@ -37,7 +47,7 @@ export function RenderPanel() {
       </button>
 
       {/* Panel body */}
-      <div className="position-panel-body">
+      <div className="position-panel-body" style={{ maxHeight: '280px' }}>
         <div className="position-panel-header">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" style={{ color: 'var(--accent)' }}>
             <circle cx="12" cy="12" r="5" />
@@ -140,6 +150,127 @@ export function RenderPanel() {
                   type="range" min="0" max="0.005" step="0.00001" 
                   value={fogDensity} 
                   onChange={e => setLightingParams({ fogDensity: parseFloat(e.target.value) })}
+                  style={{ width: '100%', accentColor: 'var(--accent)' }} 
+                />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-secondary)' }}>
+                  <span>Cloud Density</span>
+                  <span>{cloudDensity.toFixed(2)}</span>
+                </div>
+                <input 
+                  type="range" min="0" max="1" step="0.01" 
+                  value={cloudDensity} 
+                  onChange={e => setLightingParams({ cloudDensity: parseFloat(e.target.value) })}
+                  style={{ width: '100%', accentColor: 'var(--accent)' }} 
+                />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-secondary)' }}>
+                  <span>Cloud Speed</span>
+                  <span>{cloudSpeed.toFixed(2)}</span>
+                </div>
+                <input 
+                  type="range" min="0" max="5" step="0.1" 
+                  value={cloudSpeed} 
+                  onChange={e => setLightingParams({ cloudSpeed: parseFloat(e.target.value) })}
+                  style={{ width: '100%', accentColor: 'var(--accent)' }} 
+                />
+              </div>
+
+              <div style={{ width: '100%', height: '1px', background: 'var(--border-soft)', margin: '4px 0' }} />
+              
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '8px', fontSize: '11px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                <input 
+                  type="checkbox" 
+                  checked={dofEnabled}
+                  onChange={e => setLightingParams({ dofEnabled: e.target.checked })}
+                  style={{ accentColor: 'var(--accent)', width: '14px', height: '14px', cursor: 'pointer' }}
+                />
+                Depth of Field (Blur)
+              </label>
+
+              {dofEnabled && (
+                <>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-secondary)' }}>
+                      <span>Focus Distance</span>
+                      <span>{dofFocus.toFixed(0)}</span>
+                    </div>
+                    <input 
+                      type="range" min="100" max="20000" step="100" 
+                      value={dofFocus} 
+                      onChange={e => setLightingParams({ dofFocus: parseFloat(e.target.value) })}
+                      style={{ width: '100%', accentColor: 'var(--accent)' }} 
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-secondary)' }}>
+                      <span>Aperture (Blur Amount)</span>
+                      <span>{dofAperture.toFixed(5)}</span>
+                    </div>
+                    <input 
+                      type="range" min="0.00001" max="0.0005" step="0.00001" 
+                      value={dofAperture} 
+                      onChange={e => setLightingParams({ dofAperture: parseFloat(e.target.value) })}
+                      style={{ width: '100%', accentColor: 'var(--accent)' }} 
+                    />
+                  </div>
+                </>
+              )}
+
+              <div style={{ width: '100%', height: '1px', background: 'var(--border-soft)', margin: '4px 0' }} />
+              
+              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-primary)' }}>Color Grading</div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-secondary)' }}>
+                  <span>Saturation</span>
+                  <span>{visualSaturation.toFixed(2)}</span>
+                </div>
+                <input 
+                  type="range" min="0" max="2" step="0.05" 
+                  value={visualSaturation} 
+                  onChange={e => setLightingParams({ visualSaturation: parseFloat(e.target.value) })}
+                  style={{ width: '100%', accentColor: 'var(--accent)' }} 
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-secondary)' }}>
+                  <span>Temperature (K)</span>
+                  <span>{visualTemperature.toFixed(0)}</span>
+                </div>
+                <input 
+                  type="range" min="4000" max="10000" step="100" 
+                  value={visualTemperature} 
+                  onChange={e => setLightingParams({ visualTemperature: parseFloat(e.target.value) })}
+                  style={{ width: '100%', accentColor: 'var(--accent)' }} 
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-secondary)' }}>
+                  <span>Contrast</span>
+                  <span>{visualContrast.toFixed(2)}</span>
+                </div>
+                <input 
+                  type="range" min="0.5" max="2" step="0.05" 
+                  value={visualContrast} 
+                  onChange={e => setLightingParams({ visualContrast: parseFloat(e.target.value) })}
+                  style={{ width: '100%', accentColor: 'var(--accent)' }} 
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-secondary)' }}>
+                  <span>Vignette</span>
+                  <span>{visualVignette.toFixed(2)}</span>
+                </div>
+                <input 
+                  type="range" min="0" max="1" step="0.05" 
+                  value={visualVignette} 
+                  onChange={e => setLightingParams({ visualVignette: parseFloat(e.target.value) })}
                   style={{ width: '100%', accentColor: 'var(--accent)' }} 
                 />
               </div>

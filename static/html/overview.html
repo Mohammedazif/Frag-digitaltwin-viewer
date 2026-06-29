@@ -1,0 +1,380 @@
+<div class="overview-container" id="overviewDashboard">
+
+  <!-- VIEW 1: High Level Overview -->
+  <div class="dashboard-view active" id="view-1">
+    <!-- Top Strip Metrics -->
+  <div class="top-env-strip">
+    <!-- Power -->
+    <div class="env-metric">
+      <div class="env-icon"><svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+      <div class="env-details">
+        <div class="env-label">Current Energy Consumption</div>
+        <div class="env-value"><span id="overview-val-power">--</span><span class="env-unit">kWh</span></div>
+        <div class="env-meta">
+          <span id="overview-status-power" class="status-badge status-below" style="visibility:hidden"></span>
+          <span id="overview-target-power" class="env-target">Baseline: 65</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Current Month Energy -->
+    <div class="env-metric">
+      <div class="env-icon"><svg viewBox="0 0 24 24"><path d="M16 20h-8v-14h8v14zm-4-16h-2v-2h2v2zm6.5 16h-13c-.83 0-1.5-.67-1.5-1.5v-15c0-.83.67-1.5 1.5-1.5h2.5v-2h6v2h2.5c.83 0 1.5.67 1.5 1.5v15c0 .83-.67 1.5-1.5 1.5z"/></svg></div>
+      <div class="env-details">
+        <div class="env-label">This Month up to Date</div>
+        <div class="env-value"><span id="overview-val-current-month">--</span><span class="env-unit">kWh</span></div>
+        <div class="env-meta">
+          <span id="overview-status-current-month" class="status-badge status-below"></span>
+          <span id="overview-target-current-month" class="env-target">Baseline: 17.0mW</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Previous Month Energy -->
+    <div class="env-metric">
+      <div class="env-icon"><svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg></div>
+      <div class="env-details">
+        <div class="env-label">Previous Month Total</div>
+        <div class="env-value"><span id="overview-val-prev-month">--</span><span class="env-unit">kWh</span></div>
+        <div class="env-meta">
+          <span id="overview-status-prev-month" class="status-badge status-above" style="visibility:hidden"></span>
+          <span id="overview-target-prev-month" class="env-target" style="visibility:hidden">Baseline: 51mWh</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CO2 -->
+    <div class="env-metric">
+      <div class="env-icon"><svg viewBox="0 0 24 24"><path d="M19.36 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.64-4.96z"/></svg></div>
+      <div class="env-details">
+        <div class="env-label">CO2</div>
+        <div class="env-value"><span id="overview-val-co2">--</span><span class="env-unit">ppm</span></div>
+        <div class="env-meta">
+          <span id="overview-status-co2" class="status-badge"></span>
+          <span id="overview-target-co2" class="env-target">Baseline: 600</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Carbon -->
+    <div class="env-metric">
+      <div class="env-icon"><svg viewBox="0 0 24 24"><path d="M17 8C8 10 5.9 16.17 3.82 21.34l1.89.66.67-2.08C8.83 17.5 10.5 14.5 14 13c3.5-1.5 6-3 7-5 1-2 1-4 1-4s-2 0-4 1c-2 1-3.5 3.5-5 7z"/></svg></div>
+      <div class="env-details">
+        <div class="env-label">Carbon Emission</div>
+        <div class="env-value"><span id="overview-val-carbon">--</span><span class="env-unit">kg/h</span></div>
+        <div class="env-meta">
+          <span id="overview-status-carbon" class="status-badge" style="visibility:hidden"></span>
+          <span id="overview-target-carbon" class="env-target" style="visibility:hidden">Baseline: 33</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- After Hrs Load Deviation -->
+    <div class="env-metric">
+      <div class="env-icon"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg></div>
+      <div class="env-details">
+        <div class="env-label">After Hrs Load Deviation</div>
+        <div class="env-value"><span id="overview-val-epr">--</span><span class="env-unit">%</span></div>
+        <div class="env-meta">
+          <span id="overview-status-epr" class="status-badge status-below">--</span>
+          <span id="overview-target-epr" class="env-target"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2x2 Chart Grid -->
+  <div class="dashboard-grid">
+
+    <!-- Top-Left: Select PMU -->
+    <div class="custom-card">
+      <div class="card-header">
+        <div class="card-title">
+          <div class="card-title-icon"><i class='bx bx-buildings'></i></div>
+          Select PMU
+        </div>
+      </div>
+      <div class="card-content-row">
+        <div class="chart-gauge-area"><canvas id="locChart"></canvas></div>
+        <div id="pmu-breakdown-container" class="chart-list-area"></div>
+      </div>
+    </div>
+
+    <!-- Top-Right: Energy Trend -->
+    <div class="custom-card">
+      <div class="card-header">
+        <div class="card-title">
+          <div class="card-title-icon"><i class='bx bx-line-chart'></i></div>
+          Energy Trend
+        </div>
+        <button id="reset-trend-btn" class="reset-filter-btn" style="display:none"><i class='bx bx-reset'></i> Reset Filter</button>
+        <div class="toggle-group" data-target-chart="energyTrendChart">
+          <button class="toggle-btn" data-target="hourly">Hourly</button>
+          <button class="toggle-btn" data-target="daily">Daily</button>
+          <button class="toggle-btn active" data-target="monthly">Monthly</button>
+          <button class="toggle-btn" data-target="yearly">Yearly</button>
+        </div>
+      </div>
+      <div class="card-content-fill">
+        <div class="chart-wrapper"><canvas id="energyTrendChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Bottom-Left: Water Consumption -->
+    <div class="custom-card">
+      <div class="card-header">
+        <div class="card-title">
+          <div class="card-title-icon"><i class='bx bx-water'></i></div>
+          Water Consumption
+        </div>
+        <button id="reset-water-btn" class="reset-filter-btn" style="display:none"><i class='bx bx-reset'></i> Reset Filter</button>
+        <div class="toggle-group" data-target-chart="waterTrendChart">
+          <button class="toggle-btn">Hourly</button>
+          <button class="toggle-btn">Daily</button>
+          <button class="toggle-btn active">Monthly</button>
+          <button class="toggle-btn">Yearly</button>
+        </div>
+      </div>
+      <div class="card-content-row">
+        <div class="chart-gauge-area"><canvas id="waterMeterChart"></canvas></div>
+        <div class="card-content-fill">
+          <div class="chart-wrapper"><canvas id="waterTrendChart"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom-Right: Gas Consumption -->
+    <div class="custom-card">
+      <div class="card-header">
+        <div class="card-title">
+          <div class="card-title-icon"><i class='bx bx-gas-pump'></i></div>
+          Gas Consumption
+        </div>
+        <button id="reset-gas-btn" class="reset-filter-btn" style="display:none"><i class='bx bx-reset'></i> Reset Filter</button>
+        <div class="toggle-group" data-target-chart="gasTrendChart">
+          <button class="toggle-btn">Hourly</button>
+          <button class="toggle-btn">Daily</button>
+          <button class="toggle-btn active">Monthly</button>
+          <button class="toggle-btn">Yearly</button>
+        </div>
+      </div>
+      <div class="card-content-row">
+        <div class="chart-gauge-area"><canvas id="gasMeterChart"></canvas></div>
+        <div class="card-content-fill">
+          <div class="chart-wrapper"><canvas id="gasTrendChart"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  
+  <!-- Next Page Button for View 1: margin-top:auto pushes it to absolute bottom -->
+  <div style="display: flex; justify-content: flex-end; padding: 4px 10px; margin-top: auto; flex-shrink: 0;">
+      <button onclick="document.getElementById('view-1').classList.remove('active'); document.getElementById('view-2').classList.add('active'); window.OverviewDashboard.redrawCharts();" style="background: rgba(34, 211, 238, 0.2); color: #ffffff; border: 1px solid var(--accent-cyan); padding: 8px 24px; border-radius: 6px; font-family: 'DM Sans', sans-serif; font-weight: 600; cursor: pointer; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; box-shadow: 0 0 10px rgba(34, 211, 238, 0.2); transition: all 0.2s;">
+          Next &#10132;
+      </button>
+  </div>
+  
+  </div> <!-- End View 1 -->
+
+  <!-- VIEW 2: Detailed Analysis -->
+  <div class="dashboard-view" id="view-2">
+
+      
+      <div class="dashboard-content-grid">
+      <div class="card" style="display: flex; flex-direction: column; flex: 1;">
+          <div class="card-header">
+              <span>Energy Usage Chart</span>
+              <div style="display:flex; align-items:center; gap: 15px;">
+                  <div id="usage-status" class="usage-status"></div>
+                  <button id="usage-reset-btn" style="display:none; align-items:center; gap: 3px; padding: 2px 8px; font-size: 10px; font-family: var(--font-body); font-weight: 500; background: rgba(239, 68, 68, 0.1); color: #ffffff; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 4px; cursor: pointer; transition: all 0.2s; height: 20px; margin: -5px 0;" onclick="setUsagePeriod('today')" title="Reset to Today">
+                      <i class='bx bx-reset'></i> Reset
+                  </button>
+              </div>
+          </div>
+
+          <div class="usage-controls">
+              <button class="usage-btn active" onclick="setUsagePeriod('today')">Today</button>
+              <button class="usage-btn" onclick="setUsagePeriod('week')">This Week</button>
+              <button class="usage-btn" onclick="setUsagePeriod('month')">This Month</button>
+              <button id="usage-picker-btn" class="usage-btn" onclick="toggleDatePicker()">Date Picker</button>
+              <div id="date-picker-input" style="display:none; gap:5px; align-items:center; flex: 1;">
+                  <input type="date" id="usage-date-input" class="usage-btn" style="width: 100%; text-align: center;"
+                      placeholder="Select Date" onchange="window.handleUsageDateSelect(this.value)">
+              </div>
+              <button id="usage-range-btn" class="usage-btn" onclick="toggleRangeInputs()">Start/End</button>
+              <div id="range-inputs" style="display:none; gap:5px; align-items:center; flex: 2;">
+                  <input type="date" id="usage-start-date" class="usage-btn" style="width: 100%; text-align: center;"
+                      placeholder="Start" onchange="window.handleRangeSelect()">
+                  <span style="color:#94a3b8; font-family:var(--font-body); font-size:11px;">to</span>
+                  <input type="date" id="usage-end-date" class="usage-btn" style="width: 100%; text-align: center;"
+                      placeholder="End" onchange="window.handleRangeSelect()">
+              </div>
+          </div>
+
+          <div class="usage-slider-container">
+              <input type="range" id="usage-zoom-slider" class="usage-slider" min="0" max="100" value="100"
+                  oninput="handleUsageZoom(this.value)">
+          </div>
+
+          <div class="chart-box" style="flex: 1; min-height: 0;">
+              <canvas id="usageLineChart"></canvas>
+          </div>
+
+          <div class="usage-legend">
+              <div class="legend-item" onclick="toggleUsageDataset('AHU Usage', this)">
+                  <div class="legend-color" style="background: #3b82f6;"></div> AHU
+              </div>
+              <div class="legend-item" onclick="toggleUsageDataset('FCU Usage', this)">
+                  <div class="legend-color" style="background: #ef4444;"></div> FCU
+              </div>
+              <div class="legend-item" onclick="toggleUsageDataset('Lighting Usage', this)">
+                  <div class="legend-color" style="background: #f97316;"></div> Lighting
+              </div>
+              <div class="legend-item" onclick="toggleUsageDataset('Power Usage', this)">
+                  <div class="legend-color" style="background: #10b981;"></div> Power
+              </div>
+              <div class="legend-item" onclick="toggleUsageDataset('VAV Usage', this)">
+                  <div class="legend-color" style="background: #06b6d4;"></div> VAV
+              </div>
+              <div class="legend-item" onclick="toggleUsageDataset('Boiler Usage', this)">
+                  <div class="legend-color" style="background: #eab308;"></div> Boiler
+              </div>
+              <div class="legend-item" onclick="toggleUsageDataset('Chiller Usage', this)">
+                  <div class="legend-color" style="background: #6366f1;"></div> Chiller
+              </div>
+              <div class="legend-item" onclick="toggleUsageDataset('CT Usage', this)">
+                  <div class="legend-color" style="background: #8b5cf6;"></div> CT
+              </div>
+              <div class="legend-item" onclick="toggleUsageDataset('Pumps Usage', this)">
+                  <div class="legend-color" style="background: #d946ef;"></div> Pumps
+              </div>
+          </div>
+      </div>
+          <div class="bottom-row" style="height: 100%;">
+              <div class="card">
+                  <div class="card-header" style="display: flex; align-items: center; margin-bottom: 15px;">
+                      <span>Energy Waste & Risk from KPIs</span>
+                      <div style="display: flex; gap: 12px; margin-left: auto; text-transform: none; letter-spacing: 0;">
+                          <div style="background: rgba(255,255,255,0.05); padding: 4px 12px; border-radius: 6px; text-align: center;">
+                              <div style="font-size: 12px; color: #94a3b8; margin-bottom: 2px; text-transform: uppercase;">Total Waste</div>
+                              <div style="font-family: var(--font-mono); font-size: 17px; font-weight: 600; color: #ffffff;"><span id="total-waste-kwh">--</span> <span style="font-family: var(--font-body); font-size: 14px; font-weight: 400; color: #94a3b8;">kWh</span></div>
+                          </div>
+                          <div style="background: rgba(255,255,255,0.05); padding: 4px 12px; border-radius: 6px; text-align: center;">
+                              <div style="font-size: 12px; color: #94a3b8; margin-bottom: 2px; text-transform: uppercase;">Total Cost</div>
+                              <div style="font-family: var(--font-mono); font-size: 17px; font-weight: 600; color: #ffffff;"><span id="total-cost-aed">--</span> <span style="font-family: var(--font-body); font-size: 14px; font-weight: 400; color: #94a3b8;">AED</span></div>
+                          </div>
+                      </div>
+                  </div>
+                  <div class="risk-container">
+                      <div class="risk-row">
+                          <div class="risk-label" style="background:rgba(239,68,68,0.8);">Overnight / Idle Load</div>
+                          <div class="risk-bar-bg"><div class="risk-bar-fill" style="width:20%;background:#ef4444;"></div></div>
+                          <div class="risk-value">20%</div>
+                      </div>
+                      <div class="risk-row">
+                          <div class="risk-label" style="background:rgba(249,115,22,0.8);">HVAC / EPR</div>
+                          <div class="risk-bar-bg"><div class="risk-bar-fill" style="width:15%;background:#f97316;"></div></div>
+                          <div class="risk-value">15%</div>
+                      </div>
+
+                      <div class="risk-row">
+                          <div class="risk-label" style="background:rgba(234,179,8,0.8);">Water Consumption</div>
+                          <div class="risk-bar-bg"><div class="risk-bar-fill" style="width:5%;background:#eab308;"></div></div>
+                          <div class="risk-value">5%</div>
+                      </div>
+                      <div class="risk-row">
+                          <div class="risk-label" style="background:rgba(234,179,8,0.8);">Load Imbalance</div>
+                          <div class="risk-bar-bg"><div class="risk-bar-fill" style="width:3%;background:#eab308;"></div></div>
+                          <div class="risk-value">3%</div>
+                      </div>
+                  </div>
+              </div>
+              <div class="card">
+                  <div class="card-header" style="margin-bottom:5px;display:flex;">
+                      <span>Optimization & Action</span>
+                      <span style="font-family:var(--font-body);font-size:12px;font-weight:500;color:#eab308;margin-left:auto;margin-right:15px;text-transform:none;letter-spacing:0;">Action on Warning/Alarms</span>
+                  </div>
+                  <div class="action-grid">
+                      <div class="action-item">
+                          <div class="action-item-header">
+                              <span class="action-title">Overnight / Idle Load</span>
+                              <span class="action-status">15%<br><span class="action-status-note">(Warning)</span></span>
+                          </div>
+                          <div class="action-desc">Schedule pumps, lighting, and HVAC during off-hours.</div>
+                          <div style="display: flex; gap: 8px; margin-top: 16px;">
+                              <div style="background: rgba(255,255,255,0.05); padding: 6px; border-radius: 6px; flex: 1;">
+                                  <div style="font-family: var(--font-body); font-size: 11px; font-weight: 400; color: #94a3b8; margin-bottom: 2px;">Energy Waste</div>
+                                  <div style="font-family: var(--font-mono); font-size: 17px; font-weight: 600; color: #ffffff;"><span id="opt-overnight-kwh">--</span> <span style="font-family: var(--font-body); font-size: 14px; font-weight: 400; color: #94a3b8;">kWh</span></div>
+                              </div>
+                              <div style="background: rgba(255,255,255,0.05); padding: 6px; border-radius: 6px; flex: 1;">
+                                  <div style="font-family: var(--font-body); font-size: 11px; font-weight: 400; color: #94a3b8; margin-bottom: 2px;">Cost Impact</div>
+                                  <div style="font-family: var(--font-mono); font-size: 17px; font-weight: 600; color: #ffffff;"><span id="opt-overnight-aed">--</span> <span style="font-family: var(--font-body); font-size: 14px; font-weight: 400; color: #94a3b8;">AED</span></div>
+                              </div>
+                          </div>
+                      </div>
+                      <div class="action-item">
+                          <div class="action-item-header">
+                              <span class="action-title">HVAC / EPR</span>
+                              <span class="action-status">15%<br><span class="action-status-note">(Warning)</span></span>
+                          </div>
+                          <div class="action-desc">Timely FDD maintenance saves energy and extends equipment life.</div>
+                          <div style="display: flex; gap: 8px; margin-top: 16px;">
+                              <div style="background: rgba(255,255,255,0.05); padding: 6px; border-radius: 6px; flex: 1;">
+                                  <div style="font-family: var(--font-body); font-size: 11px; font-weight: 400; color: #94a3b8; margin-bottom: 2px;">Energy Waste</div>
+                                  <div style="font-family: var(--font-mono); font-size: 17px; font-weight: 600; color: #ffffff;"><span id="opt-hvac-kwh">--</span> <span style="font-family: var(--font-body); font-size: 14px; font-weight: 400; color: #94a3b8;">kWh</span></div>
+                              </div>
+                              <div style="background: rgba(255,255,255,0.05); padding: 6px; border-radius: 6px; flex: 1;">
+                                  <div style="font-family: var(--font-body); font-size: 11px; font-weight: 400; color: #94a3b8; margin-bottom: 2px;">Cost Impact</div>
+                                  <div style="font-family: var(--font-mono); font-size: 17px; font-weight: 600; color: #ffffff;"><span id="opt-hvac-aed">--</span> <span style="font-family: var(--font-body); font-size: 14px; font-weight: 400; color: #94a3b8;">AED</span></div>
+                              </div>
+                          </div>
+                      </div>
+
+                      <div class="action-item">
+                          <div class="action-item-header">
+                              <span class="action-title">Power Factor</span>
+                              <span class="action-status">5%<br><span class="action-status-note">(Warning)</span></span>
+                          </div>
+                          <div class="action-desc">Ensure capacitor banks operate correctly.</div>
+                          <div style="display: flex; gap: 8px; margin-top: 16px;">
+                              <div style="background: rgba(255,255,255,0.05); padding: 6px; border-radius: 6px; flex: 1;">
+                                  <div style="font-family: var(--font-body); font-size: 11px; font-weight: 400; color: #94a3b8; margin-bottom: 2px;">Energy Waste</div>
+                                  <div style="font-family: var(--font-mono); font-size: 17px; font-weight: 600; color: #ffffff;"><span id="opt-power-kwh">--</span> <span style="font-family: var(--font-body); font-size: 14px; font-weight: 400; color: #94a3b8;">kWh</span></div>
+                              </div>
+                              <div style="background: rgba(255,255,255,0.05); padding: 6px; border-radius: 6px; flex: 1;">
+                                  <div style="font-family: var(--font-body); font-size: 11px; font-weight: 400; color: #94a3b8; margin-bottom: 2px;">Cost Impact</div>
+                                  <div style="font-family: var(--font-mono); font-size: 17px; font-weight: 600; color: #ffffff;"><span id="opt-power-aed">--</span> <span style="font-family: var(--font-body); font-size: 14px; font-weight: 400; color: #94a3b8;">AED</span></div>
+                              </div>
+                          </div>
+                      </div>
+                      <div class="action-item">
+                          <div class="action-item-header">
+                              <span class="action-title">Load Imbalance</span>
+                              <span class="action-status">27%<br><span class="action-status-note">(Warning)</span></span>
+                          </div>
+                          <div class="action-desc">Regular phase balancing and equipment check.</div>
+                          <div style="display: flex; gap: 8px; margin-top: 16px;">
+                              <div style="background: rgba(255,255,255,0.05); padding: 6px; border-radius: 6px; flex: 1;">
+                                  <div style="font-family: var(--font-body); font-size: 11px; font-weight: 400; color: #94a3b8; margin-bottom: 2px;">Energy Waste</div>
+                                  <div style="font-family: var(--font-mono); font-size: 17px; font-weight: 600; color: #ffffff;"><span id="opt-load-kwh">--</span> <span style="font-family: var(--font-body); font-size: 14px; font-weight: 400; color: #94a3b8;">kWh</span></div>
+                              </div>
+                              <div style="background: rgba(255,255,255,0.05); padding: 6px; border-radius: 6px; flex: 1;">
+                                  <div style="font-family: var(--font-body); font-size: 11px; font-weight: 400; color: #94a3b8; margin-bottom: 2px;">Cost Impact</div>
+                                  <div style="font-family: var(--font-mono); font-size: 17px; font-weight: 600; color: #ffffff;"><span id="opt-load-aed">--</span> <span style="font-family: var(--font-body); font-size: 14px; font-weight: 400; color: #94a3b8;">AED</span></div>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+          </div>
+          <!-- Back Button inside dashboard-content-grid flex column -->
+          <div style="display: flex; justify-content: flex-start; padding: 4px 10px; flex-shrink: 0;">
+              <button onclick="document.getElementById('view-2').classList.remove('active'); document.getElementById('view-1').classList.add('active'); window.OverviewDashboard.redrawCharts();" style="background: rgba(34, 211, 238, 0.2); color: #ffffff; border: 1px solid var(--accent-cyan); padding: 8px 24px; border-radius: 6px; font-family: 'DM Sans', sans-serif; font-weight: 600; cursor: pointer; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; box-shadow: 0 0 10px rgba(34, 211, 238, 0.2); transition: all 0.2s;">
+                  &#8592; Back
+              </button>
+          </div>
+      </div>
+  </div> <!-- End View 2 -->
+
+</div>
