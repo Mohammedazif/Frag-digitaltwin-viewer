@@ -18,12 +18,13 @@
 .overview-container {
   display: flex;
   flex-direction: column;
-  padding: 24px 32px;
+  padding: 24px 32px 40px 32px;
   height: 100%;
-  width: calc(100% - 100px); /* Adjust width to fit the new padding */
+  width: calc(100% - 100px);
   max-width: 1700px;
-  margin: 0 auto; /* Ensure it stays perfectly centered */
-  pointer-events: auto;
+  margin: 0 auto;
+  pointer-events: none;
+  position: relative;
   
   /* Integrate perfectly with Fragments aesthetic */
   background: rgba(4, 8, 14, 0.4);
@@ -59,6 +60,7 @@
   transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
   position: relative;
   overflow: hidden;
+  pointer-events: auto;
 }
 
 /* Hover glow effect */
@@ -199,6 +201,7 @@
   overflow: hidden;
   transition: transform 0.3s ease, box-shadow 0.3s ease;
   min-height: 0;
+  pointer-events: auto;
 }
 
 .custom-card::after {
@@ -428,6 +431,7 @@
     position: relative;
     overflow: hidden;
     min-height: 0;
+    pointer-events: auto;
 }
 
 .card::after {
@@ -520,11 +524,7 @@ input.usage-btn[type="date"] {
     color-scheme: dark; /* Makes the native date picker popup dark */
 }
 
-/* Make the calendar icon white */
-input.usage-btn[type="date"]::-webkit-calendar-picker-indicator {
-    filter: invert(1);
-    cursor: pointer;
-}
+
 
 .usage-slider-container {
     padding: 0 10px;
@@ -706,4 +706,155 @@ input.usage-btn[type="date"]::-webkit-calendar-picker-indicator {
     color: #94a3b8;
     line-height: 1.4;
     margin-bottom: 8px;
+}
+
+/* ─── Chart Date Popup Dialog ─────────────────────────────── */
+.chart-date-popup {
+    position: fixed;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 24px;
+    overflow: hidden;
+    animation: popupFadeIn 0.2s ease;
+}
+
+@keyframes popupFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.chart-date-popup-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(4px);
+}
+
+.chart-date-popup-box {
+    position: relative;
+    background: rgba(20, 30, 48, 0.95);
+    border: 1px solid rgba(0, 240, 255, 0.15);
+    border-radius: 16px;
+    padding: 28px 32px;
+    min-width: 320px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 30px rgba(0, 240, 255, 0.08);
+    backdrop-filter: blur(20px);
+}
+
+.chart-date-popup-title {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    color: #ffffff;
+    margin-bottom: 20px;
+    letter-spacing: 0.5px;
+}
+
+.chart-date-popup-inputs {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 24px;
+}
+
+.chart-date-popup-inputs label {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.5);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.usage-btn {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 8px 16px;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 11px;
+    font-family: var(--font-body);
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    flex: 1;
+    color-scheme: dark;
+}
+
+input[type="date"].usage-btn::-webkit-calendar-picker-indicator,
+.chart-date-popup-inputs input[type="date"]::-webkit-calendar-picker-indicator {
+    background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0iI2ZmZmZmZiI+PHBhdGggZD0iTTE5IDRoLTFWMmgtMnYySDhWMkg2djJINWMtMS4xMSAwLTEuOTkuOS0xLjk5IDJMMyAyMGEyIDIgMCAwIDAgMiAyaDE0YzEuMSAwIDItLjkgMi0yVjZjMC0xLjEtLjktMi0yLTJ6bTAgMTZINVYxMGgxNHYxMHptMC0xMkg1VjZoMTR2MnoiLz48L3N2Zz4=');
+    background-position: center;
+    background-size: 14px;
+    background-repeat: no-repeat;
+    color: transparent;
+    cursor: pointer;
+}
+
+input[type="date"].usage-btn {
+    color: #ffffff;
+}
+
+.chart-date-popup-inputs input[type="date"] {
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 10px 14px;
+    color: #ffffff;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+    color-scheme: dark;
+}
+
+.chart-date-popup-inputs input[type="date"]:focus {
+    border-color: rgba(0, 240, 255, 0.5);
+    box-shadow: 0 0 12px rgba(0, 240, 255, 0.15);
+}
+
+.chart-date-popup-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.chart-date-popup-actions button {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 20px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: none;
+}
+
+#chart-popup-cancel {
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+#chart-popup-cancel:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+
+#chart-popup-apply {
+    background: rgba(0, 240, 255, 0.15);
+    color: #00f0ff;
+    border: 1px solid rgba(0, 240, 255, 0.3);
+}
+
+#chart-popup-apply:hover {
+    background: rgba(0, 240, 255, 0.25);
+    box-shadow: 0 0 15px rgba(0, 240, 255, 0.2);
 }

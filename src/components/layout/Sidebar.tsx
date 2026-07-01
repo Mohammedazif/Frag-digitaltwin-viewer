@@ -102,7 +102,17 @@ export function Sidebar({ onFiles, engineRef }: SidebarProps) {
       timeOfDay: state.timeOfDay,
       bloomStrength: state.bloomStrength,
       bloomThreshold: state.bloomThreshold,
-      fogDensity: state.fogDensity
+      fogDensity: state.fogDensity,
+      cloudDensity: state.cloudDensity,
+      cloudSpeed: state.cloudSpeed,
+      dofEnabled: state.dofEnabled,
+      dofFocus: state.dofFocus,
+      dofAperture: state.dofAperture,
+      dofMaxBlur: state.dofMaxBlur,
+      visualSaturation: state.visualSaturation,
+      visualTemperature: state.visualTemperature,
+      visualContrast: state.visualContrast,
+      visualVignette: state.visualVignette
     }
 
     await saveViewAndSettings(
@@ -110,8 +120,12 @@ export function Sidebar({ onFiles, engineRef }: SidebarProps) {
       renderSettings
     )
     
-    // Show some brief feedback or rely on the toast, maybe just standard UI feedback
-    alert('Camera view and render settings saved to project.')
+    const btn = document.getElementById('save-camera-btn')
+    if (btn) {
+      const originalText = btn.innerHTML
+      btn.innerHTML = '✓ Saved Successfully'
+      setTimeout(() => { btn.innerHTML = originalText }, 2000)
+    }
   }
 
   const onInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -160,6 +174,7 @@ export function Sidebar({ onFiles, engineRef }: SidebarProps) {
             {currentProject && (
               <>
                 <button 
+                  id="save-camera-btn"
                   className="download-btn" 
                   style={{ background: 'var(--bg-raised)', color: 'var(--text-primary)', marginBottom: '8px' }} 
                   onClick={handleSaveViewAndSettings}

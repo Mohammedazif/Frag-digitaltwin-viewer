@@ -12,6 +12,8 @@ import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js'
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass.js'
+import { SSRPass } from 'three/examples/jsm/postprocessing/SSRPass.js'
+import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js'
 import { ColorGradeShader } from './ColorGradeShader'
 import * as SunCalc from 'suncalc'
 
@@ -45,8 +47,21 @@ export async function initFragmentsEngine(
   const pmremGenerator = new THREE.PMREMGenerator(world.renderer.three)
   pmremGenerator.compileEquirectangularShader()
   const envScene = new RoomEnvironment()
-  const envTexture = pmremGenerator.fromScene(envScene, 0.04).texture
+  let envTexture = pmremGenerator.fromScene(envScene, 0.04).texture
   envScene.dispose()
+
+  // Load Photorealistic HDRI
+  const rgbeLoader = new RGBELoader()
+  rgbeLoader.setCrossOrigin('anonymous')
+  rgbeLoader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/equirectangular/venice_sunset_1k.hdr', (texture) => {
+    texture.mapping = THREE.EquirectangularReflectionMapping
+    const hdriTexture = pmremGenerator.fromEquirectangular(texture).texture
+    envTexture = hdriTexture
+    if (isRealistic) {
+      world.scene.three.environment = envTexture
+    }
+    texture.dispose()
+  })
 
   // Custom Realistic Lights & Environment
   const realisticGroup = new THREE.Group()
@@ -101,6 +116,7 @@ export async function initFragmentsEngine(
   let currentCloudSpeed = 1.0
   let bokehPass: any
   let ssaoPass: any
+  let ssrPass: any
   let colorGradePass: any
 
   const setLightingParams = (params: { realisticMode: boolean, exposure: number, lightIntensity: number, ambientIntensity: number, timeOfDay: number, bloomStrength: number, bloomThreshold: number, fogDensity: number, cloudDensity: number, cloudSpeed: number, dofEnabled: boolean, dofFocus: number, dofAperture: number, dofMaxBlur: number, visualSaturation?: number, visualTemperature?: number, visualContrast?: number, visualVignette?: number }) => {
@@ -118,6 +134,10 @@ export async function initFragmentsEngine(
     
     if (ssaoPass) {
       ssaoPass.enabled = params.realisticMode
+    }
+    
+    if (ssrPass) {
+      ssrPass.enabled = false // Disabled for now as it turns all ground into a mirror without selective meshes
     }
     
     if (colorGradePass) {
@@ -241,7 +261,7 @@ export async function initFragmentsEngine(
   world.camera = new OBC.SimpleCamera(components)
 
   if (world.camera.three instanceof THREE.PerspectiveCamera || world.camera.three instanceof THREE.OrthographicCamera) {
-    world.camera.three.near = 0.1
+    world.camera.three.near = 5
     world.camera.three.far = 200000
     world.camera.three.updateProjectionMatrix()
   }
@@ -268,6 +288,21 @@ export async function initFragmentsEngine(
   ssaoPass.maxDistance = 0.1
   ssaoPass.enabled = false
   composer.addPass(ssaoPass)
+
+  ssrPass = new SSRPass({
+    renderer: world.renderer.three,
+    scene: world.scene.three,
+    camera: world.camera.three,
+    width: window.innerWidth,
+    height: window.innerHeight,
+    groundReflector: null,
+    selects: null
+  })
+  ssrPass.enabled = false
+  ssrPass.maxDistance = 10000
+  ssrPass.opacity = 0.8
+  ssrPass.thickness = 100
+  composer.addPass(ssrPass)
 
   colorGradePass = new ShaderPass(ColorGradeShader)
   colorGradePass.enabled = false

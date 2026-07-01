@@ -52,6 +52,16 @@ export interface ProjectRenderSettings {
   bloomStrength: number
   bloomThreshold: number
   fogDensity: number
+  cloudDensity: number
+  cloudSpeed: number
+  dofEnabled: boolean
+  dofFocus: number
+  dofAperture: number
+  dofMaxBlur: number
+  visualSaturation: number
+  visualTemperature: number
+  visualContrast: number
+  visualVignette: number
 }
 
 export interface ProjectMeta {

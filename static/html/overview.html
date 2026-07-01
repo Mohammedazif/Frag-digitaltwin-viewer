@@ -11,8 +11,8 @@
         <div class="env-label">Current Energy Consumption</div>
         <div class="env-value"><span id="overview-val-power">--</span><span class="env-unit">kWh</span></div>
         <div class="env-meta">
-          <span id="overview-status-power" class="status-badge status-below" style="visibility:hidden"></span>
-          <span id="overview-target-power" class="env-target">Baseline: 65</span>
+          <span id="overview-status-power" class="status-badge" style="visibility:hidden"></span>
+          <span id="overview-target-power" class="env-target">Baseline: 250kWh</span>
         </div>
       </div>
     </div>
@@ -21,11 +21,11 @@
     <div class="env-metric">
       <div class="env-icon"><svg viewBox="0 0 24 24"><path d="M16 20h-8v-14h8v14zm-4-16h-2v-2h2v2zm6.5 16h-13c-.83 0-1.5-.67-1.5-1.5v-15c0-.83.67-1.5 1.5-1.5h2.5v-2h6v2h2.5c.83 0 1.5.67 1.5 1.5v15c0 .83-.67 1.5-1.5 1.5z"/></svg></div>
       <div class="env-details">
-        <div class="env-label">This Month up to Date</div>
+        <div id="top-metric-current-label" class="env-label">This Month</div>
         <div class="env-value"><span id="overview-val-current-month">--</span><span class="env-unit">kWh</span></div>
         <div class="env-meta">
-          <span id="overview-status-current-month" class="status-badge status-below"></span>
-          <span id="overview-target-current-month" class="env-target">Baseline: 17.0mW</span>
+          <span id="overview-status-current-month" class="status-badge" style="display:none"></span>
+          <span id="overview-target-current-month" class="env-target" style="display:none"></span>
         </div>
       </div>
     </div>
@@ -34,11 +34,11 @@
     <div class="env-metric">
       <div class="env-icon"><svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg></div>
       <div class="env-details">
-        <div class="env-label">Previous Month Total</div>
+        <div id="top-metric-prev-label" class="env-label">Previous Month</div>
         <div class="env-value"><span id="overview-val-prev-month">--</span><span class="env-unit">kWh</span></div>
         <div class="env-meta">
-          <span id="overview-status-prev-month" class="status-badge status-above" style="visibility:hidden"></span>
-          <span id="overview-target-prev-month" class="env-target" style="visibility:hidden">Baseline: 51mWh</span>
+          <span id="overview-status-prev-month" class="status-badge status-above" style="display:none"></span>
+          <span id="overview-target-prev-month" class="env-target" style="display:none">Baseline: 51mWh</span>
         </div>
       </div>
     </div>
@@ -51,7 +51,7 @@
         <div class="env-value"><span id="overview-val-co2">--</span><span class="env-unit">ppm</span></div>
         <div class="env-meta">
           <span id="overview-status-co2" class="status-badge"></span>
-          <span id="overview-target-co2" class="env-target">Baseline: 600</span>
+          <span id="overview-target-co2" class="env-target">Baseline: 600ppm</span>
         </div>
       </div>
     </div>
@@ -63,8 +63,8 @@
         <div class="env-label">Carbon Emission</div>
         <div class="env-value"><span id="overview-val-carbon">--</span><span class="env-unit">kg/h</span></div>
         <div class="env-meta">
-          <span id="overview-status-carbon" class="status-badge" style="visibility:hidden"></span>
-          <span id="overview-target-carbon" class="env-target" style="visibility:hidden">Baseline: 33</span>
+          <span id="overview-status-carbon" class="status-badge" style="display:none"></span>
+          <span id="overview-target-carbon" class="env-target" style="display:none">Baseline: 33</span>
         </div>
       </div>
     </div>
@@ -86,13 +86,14 @@
   <!-- 2x2 Chart Grid -->
   <div class="dashboard-grid">
 
-    <!-- Top-Left: Select PMU -->
+    <!-- Top-Left: Energy Breakdown -->
     <div class="custom-card">
       <div class="card-header">
         <div class="card-title">
-          <div class="card-title-icon"><i class='bx bx-buildings'></i></div>
-          Select PMU
+          <div class="card-title-icon"><i class='bx bx-pie-chart-alt-2'></i></div>
+          Energy Breakdown
         </div>
+        <button id="reset-trend-btn" class="reset-filter-btn" style="display:none"><i class='bx bx-reset'></i> Reset Filter</button>
       </div>
       <div class="card-content-row">
         <div class="chart-gauge-area"><canvas id="locChart"></canvas></div>
@@ -103,16 +104,17 @@
     <!-- Top-Right: Energy Trend -->
     <div class="custom-card">
       <div class="card-header">
-        <div class="card-title">
+        <div class="card-title" style="position: relative;">
           <div class="card-title-icon"><i class='bx bx-line-chart'></i></div>
           Energy Trend
+          <span id="subtitle-energyTrendChart" style="position: absolute; top: 100%; left: 34px; font-size: 11px; color: #00f0ff; font-weight: 500; letter-spacing: 0.5px; white-space: nowrap; margin-top: 2px;"></span>
         </div>
-        <button id="reset-trend-btn" class="reset-filter-btn" style="display:none"><i class='bx bx-reset'></i> Reset Filter</button>
         <div class="toggle-group" data-target-chart="energyTrendChart">
           <button class="toggle-btn" data-target="hourly">Hourly</button>
           <button class="toggle-btn" data-target="daily">Daily</button>
           <button class="toggle-btn active" data-target="monthly">Monthly</button>
-          <button class="toggle-btn" data-target="yearly">Yearly</button>
+          <button class="toggle-btn" onclick="openChartPopupPicker(event, this, 'date', 'energyTrendChart')">Date Picker</button>
+          <button class="toggle-btn" onclick="openChartPopupPicker(event, this, 'range', 'energyTrendChart')">Start/End</button>
         </div>
       </div>
       <div class="card-content-fill">
@@ -123,16 +125,18 @@
     <!-- Bottom-Left: Water Consumption -->
     <div class="custom-card">
       <div class="card-header">
-        <div class="card-title">
+        <div class="card-title" style="position: relative;">
           <div class="card-title-icon"><i class='bx bx-water'></i></div>
           Water Consumption
+          <span id="subtitle-waterTrendChart" style="position: absolute; top: 100%; left: 34px; font-size: 11px; color: #00f0ff; font-weight: 500; letter-spacing: 0.5px; white-space: nowrap; margin-top: 2px;"></span>
         </div>
         <button id="reset-water-btn" class="reset-filter-btn" style="display:none"><i class='bx bx-reset'></i> Reset Filter</button>
         <div class="toggle-group" data-target-chart="waterTrendChart">
           <button class="toggle-btn">Hourly</button>
           <button class="toggle-btn">Daily</button>
           <button class="toggle-btn active">Monthly</button>
-          <button class="toggle-btn">Yearly</button>
+          <button class="toggle-btn" onclick="openChartPopupPicker(event, this, 'date', 'waterTrendChart')">Date Picker</button>
+          <button class="toggle-btn" onclick="openChartPopupPicker(event, this, 'range', 'waterTrendChart')">Start/End</button>
         </div>
       </div>
       <div class="card-content-row">
@@ -146,16 +150,18 @@
     <!-- Bottom-Right: Gas Consumption -->
     <div class="custom-card">
       <div class="card-header">
-        <div class="card-title">
+        <div class="card-title" style="position: relative;">
           <div class="card-title-icon"><i class='bx bx-gas-pump'></i></div>
           Gas Consumption
+          <span id="subtitle-gasTrendChart" style="position: absolute; top: 100%; left: 34px; font-size: 11px; color: #00f0ff; font-weight: 500; letter-spacing: 0.5px; white-space: nowrap; margin-top: 2px;"></span>
         </div>
         <button id="reset-gas-btn" class="reset-filter-btn" style="display:none"><i class='bx bx-reset'></i> Reset Filter</button>
         <div class="toggle-group" data-target-chart="gasTrendChart">
           <button class="toggle-btn">Hourly</button>
           <button class="toggle-btn">Daily</button>
           <button class="toggle-btn active">Monthly</button>
-          <button class="toggle-btn">Yearly</button>
+          <button class="toggle-btn" onclick="openChartPopupPicker(event, this, 'date', 'gasTrendChart')">Date Picker</button>
+          <button class="toggle-btn" onclick="openChartPopupPicker(event, this, 'range', 'gasTrendChart')">Start/End</button>
         </div>
       </div>
       <div class="card-content-row">
@@ -168,14 +174,13 @@
 
   </div>
   
-  <!-- Next Page Button for View 1: margin-top:auto pushes it to absolute bottom -->
-  <div style="display: flex; justify-content: flex-end; padding: 4px 10px; margin-top: auto; flex-shrink: 0;">
-      <button onclick="document.getElementById('view-1').classList.remove('active'); document.getElementById('view-2').classList.add('active'); window.OverviewDashboard.redrawCharts();" style="background: rgba(34, 211, 238, 0.2); color: #ffffff; border: 1px solid var(--accent-cyan); padding: 8px 24px; border-radius: 6px; font-family: 'DM Sans', sans-serif; font-weight: 600; cursor: pointer; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; box-shadow: 0 0 10px rgba(34, 211, 238, 0.2); transition: all 0.2s;">
-          Next &#10132;
-      </button>
-  </div>
+
   
   </div> <!-- End View 1 -->
+
+  <!-- Next Page Button — floats in container bottom padding -->
+  <button id="next-view-btn" onclick="document.getElementById('view-1').classList.remove('active'); document.getElementById('view-2').classList.add('active'); this.style.display='none'; document.getElementById('back-view-btn').style.display='block'; window.OverviewDashboard.redrawCharts();" style="position:absolute; bottom:10px; right:32px; background:none; color:rgba(255,255,255,0.4); border:none; padding:0; font-family:'DM Sans',sans-serif; font-weight:600; cursor:pointer; text-transform:uppercase; font-size:14px; letter-spacing:1px; transition:color 0.2s; pointer-events:auto;" onmouseover="this.style.color='rgba(0,240,255,0.9)'" onmouseout="this.style.color='rgba(255,255,255,0.4)'">Next &#10132;</button>
+  <button id="back-view-btn" onclick="document.getElementById('view-2').classList.remove('active'); document.getElementById('view-1').classList.add('active'); this.style.display='none'; document.getElementById('next-view-btn').style.display='block'; window.OverviewDashboard.redrawCharts();" style="position:absolute; bottom:10px; left:32px; display:none; background:none; color:rgba(255,255,255,0.4); border:none; padding:0; font-family:'DM Sans',sans-serif; font-weight:600; cursor:pointer; text-transform:uppercase; font-size:14px; letter-spacing:1px; transition:color 0.2s; pointer-events:auto;" onmouseover="this.style.color='rgba(0,240,255,0.9)'" onmouseout="this.style.color='rgba(255,255,255,0.4)'">&#8592; Back</button>
 
   <!-- VIEW 2: Detailed Analysis -->
   <div class="dashboard-view" id="view-2">
@@ -368,12 +373,7 @@
                   </div>
               </div>
           </div>
-          <!-- Back Button inside dashboard-content-grid flex column -->
-          <div style="display: flex; justify-content: flex-start; padding: 4px 10px; flex-shrink: 0;">
-              <button onclick="document.getElementById('view-2').classList.remove('active'); document.getElementById('view-1').classList.add('active'); window.OverviewDashboard.redrawCharts();" style="background: rgba(34, 211, 238, 0.2); color: #ffffff; border: 1px solid var(--accent-cyan); padding: 8px 24px; border-radius: 6px; font-family: 'DM Sans', sans-serif; font-weight: 600; cursor: pointer; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; box-shadow: 0 0 10px rgba(34, 211, 238, 0.2); transition: all 0.2s;">
-                  &#8592; Back
-              </button>
-          </div>
+
       </div>
   </div> <!-- End View 2 -->
 
