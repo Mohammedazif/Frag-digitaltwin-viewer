@@ -8,6 +8,7 @@ import { ModelInfoPanel } from '@/components/model/ModelInfoPanel'
 import { DownloadButton } from '@/components/download/DownloadButton'
 import { ProjectListPage } from '@/components/project/ProjectListPage'
 import { FinLoginPanel } from '@/components/fin/FinLoginPanel'
+import { ProjectSettingsModal } from '@/components/project/ProjectSettingsModal'
 import type { FragmentsEngine } from '@/lib/fragmentsEngine'
 
 interface SidebarProps {
@@ -28,17 +29,23 @@ export function Sidebar({ onFiles, engineRef }: SidebarProps) {
   const currentProject = useProjectStore(s => s.currentProject)
   const closeProject = useProjectStore(s => s.closeProject)
   const exportAsZip = useProjectStore(s => s.exportAsZip)
+  const exportFinProjectAsZip = useProjectStore(s => s.exportFinProjectAsZip)
   const updateThumbnail = useProjectStore(s => s.updateThumbnail)
   const saveViewAndSettings = useProjectStore(s => s.saveViewAndSettings)
   const setStep = useAppStore(s => s.setStep)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isExporting, setIsExporting] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
 
   const handleExport = async () => {
     try {
       setIsExporting(true)
-      await exportAsZip()
+      if (currentProject?.isFinProject) {
+        await exportFinProjectAsZip()
+      } else {
+        await exportAsZip()
+      }
     } finally {
       setIsExporting(false)
     }
@@ -185,6 +192,16 @@ export function Sidebar({ onFiles, engineRef }: SidebarProps) {
                   </svg>
                   Save Camera & Render View
                 </button>
+                {currentProject.isFinProject && (
+                  <button 
+                    className="download-btn"
+                    style={{ background: 'var(--bg-raised)', color: 'var(--text-primary)', marginBottom: '8px' }} 
+                    onClick={() => setShowSettings(true)}
+                  >
+                    <i className="bx bx-slider-alt" style={{ marginRight: '8px', fontSize: '16px' }}></i>
+                    Dashboard Settings
+                  </button>
+                )}
                 <button 
                   className="download-btn" 
                   style={{ background: 'var(--text-primary)' }} 
@@ -195,7 +212,7 @@ export function Sidebar({ onFiles, engineRef }: SidebarProps) {
                     <path d="M4 3a2 2 0 100 4h12a2 2 0 100-4H4z" />
                     <path fillRule="evenodd" d="M3 8h14v7a2 2 0 01-2 2H5a2 2 0 01-2-2V8zm5 3a1 1 0 011-1h2a1 1 0 110 2H9a1 1 0 01-1-1z" clipRule="evenodd" />
                   </svg>
-                  Export Project as ZIP
+                  {currentProject.isFinProject ? 'Export FIN Standalone Viewer' : 'Export Project as ZIP'}
                 </button>
               </>
             )}
@@ -255,6 +272,8 @@ export function Sidebar({ onFiles, engineRef }: SidebarProps) {
           <p style={{ color: 'rgba(255, 255, 255, 0.7)', marginTop: '8px', fontSize: '14px' }}>Please wait while your standalone viewer is prepared.</p>
         </div>
       )}
+
+      <ProjectSettingsModal visible={showSettings} onClose={() => setShowSettings(false)} />
     </aside>
   )
 }

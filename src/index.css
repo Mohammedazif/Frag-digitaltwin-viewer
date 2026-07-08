@@ -1527,3 +1527,266 @@ Wait, if iframe has pointer-events: auto, it works. Let's fix this in iframe bod
   font-size: 10px;
   color: var(--text-muted);
 }
+
+.dashboard-settings-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.dashboard-settings-modal {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 600px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.4);
+  animation: slideUp 0.1s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.dashboard-settings-header {
+  padding: 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dashboard-settings-header h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+}
+
+.ds-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 24px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.ds-close-btn:hover {
+  color: var(--text-primary);
+}
+
+.dashboard-settings-tabs {
+  display: flex;
+  padding: 0 24px;
+  gap: 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+  overflow-x: auto;
+}
+
+.ds-tab {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 16px 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  position: relative;
+  white-space: nowrap;
+}
+
+.ds-tab:hover {
+  color: var(--text-primary);
+}
+
+.ds-tab.active {
+  color: var(--accent);
+}
+
+.ds-tab.active::after {
+  content: "";
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
+}
+
+.dashboard-settings-body {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.ds-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ds-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: -8px;
+  margin-bottom: 16px;
+}
+
+.ds-field {
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ds-field-row {
+  display: flex;
+  gap: 16px;
+}
+.ds-field-row .ds-field {
+  flex: 1;
+}
+
+.ds-field label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.ds-field input {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.ds-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--bg-surface);
+}
+
+.ds-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ds-list-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+
+.ds-list-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ds-list-controls button {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+.ds-list-controls button:hover:not(:disabled) {
+  color: var(--accent);
+}
+.ds-list-controls button:disabled {
+  opacity: 0.2;
+  cursor: not-allowed;
+}
+
+.ds-list-content {
+  font-size: 14px;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ds-list-content i {
+  color: var(--accent);
+  font-size: 16px;
+}
+
+.ds-toggle-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.ds-toggle-btn.active {
+  background: rgba(46, 204, 113, 0.1);
+  color: #2ecc71;
+  border-color: rgba(46, 204, 113, 0.3);
+}
+
+.dashboard-settings-footer {
+  padding: 24px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.ds-btn {
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: all 0.2s;
+}
+.ds-btn-secondary {
+  background: transparent;
+  color: var(--text-secondary);
+}
+.ds-btn-secondary:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+.ds-btn-primary {
+  background: var(--accent);
+  color: white;
+}
+.ds-btn-primary:hover {
+  background: var(--accent-dark);
+}
+.ds-btn-primary:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+

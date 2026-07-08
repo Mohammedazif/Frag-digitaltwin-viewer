@@ -1,4 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
+import { useProjectStore } from '@/store/useProjectStore'
+import type { ProjectApiSettings } from '@/types'
 
 interface DashboardOverlayProps {
   visible: boolean
@@ -6,6 +8,7 @@ interface DashboardOverlayProps {
 
 export function DashboardOverlay({ visible }: DashboardOverlayProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const currentProject = useProjectStore(s => s.currentProject)
 
   useEffect(() => {
     if (!visible) return
@@ -16,7 +19,7 @@ export function DashboardOverlay({ visible }: DashboardOverlayProps) {
     }
     window.addEventListener('dashboard-event', handler)
 
-    fetch('/templates/index.html')
+    fetch('templates/index.html')
       .then(res => res.text())
       .then(html => {
         if (!mounted || !containerRef.current) return
@@ -47,6 +50,38 @@ export function DashboardOverlay({ visible }: DashboardOverlayProps) {
         tempDiv.innerHTML = bodyContent
         Array.from(tempDiv.querySelectorAll('script')).forEach(s => s.remove())
         containerRef.current.innerHTML = tempDiv.innerHTML
+
+        // Inject project API settings BEFORE running template scripts
+        const apiSettings: ProjectApiSettings = currentProject?.apiSettings || {}
+        const configScript = `
+          window.INJECTED_PROJECT_CONFIG = {
+            fin: {
+              baseUrl: "${apiSettings.finBaseUrl || 'https://localhost'}",
+              project: "${apiSettings.finProjectName || 'EllisDonDemo'}",
+              interval: ${apiSettings.finInterval || 5000},
+              directMode: ${apiSettings.finDirectMode || false},
+              livePoints: ${apiSettings.finLivePoints ? JSON.stringify(apiSettings.finLivePoints) : 'undefined'},
+              endpoints: ${apiSettings.finEndpoints ? JSON.stringify(apiSettings.finEndpoints) : 'undefined'}
+            },
+            weather: {
+              lat: ${apiSettings.weatherLat ?? 24.469},
+              lon: ${apiSettings.weatherLon ?? 54.358},
+              apiKey: "${apiSettings.weatherApiKey || '88214bff7aa566e9f6ff1ba5db38f65f'}"
+            },
+            navButtons: ${apiSettings.navButtons ? JSON.stringify(apiSettings.navButtons) : 'undefined'},
+            leftCards: ${apiSettings.leftCards ? JSON.stringify(apiSettings.leftCards) : 'undefined'},
+            rightCards: ${apiSettings.rightCards ? JSON.stringify(apiSettings.rightCards) : 'undefined'},
+            sideButtons: ${apiSettings.sideButtons ? JSON.stringify(apiSettings.sideButtons.filter(b => b.enabled !== false)) : 'undefined'},
+            subPanels: ${apiSettings.subPanels ? JSON.stringify(apiSettings.subPanels) : 'undefined'},
+            modelsConfig: ${apiSettings.modelsConfig ? JSON.stringify(apiSettings.modelsConfig) : 'undefined'},
+            floorsConfig: ${apiSettings.floorsConfig ? JSON.stringify(apiSettings.floorsConfig) : 'undefined'}
+          };
+        `
+        try {
+          window.eval(configScript)
+        } catch (err) {
+          console.error('Error injecting project config:', err)
+        }
 
         // Scripts
         const scripts = Array.from(doc.querySelectorAll('script'))
@@ -80,8 +115,10 @@ export function DashboardOverlay({ visible }: DashboardOverlayProps) {
       if ((window as any).Dashboard?.finInterval) {
         clearInterval((window as any).Dashboard.finInterval)
       }
+      // Clean up injected config
+      delete (window as any).INJECTED_PROJECT_CONFIG
     }
-  }, [visible])
+  }, [visible, currentProject?.apiSettings])
 
   if (!visible) return null
 

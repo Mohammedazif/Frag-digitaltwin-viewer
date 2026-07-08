@@ -28,6 +28,7 @@ export function ProjectListPage({ engineRef }: ProjectListPageProps) {
   const setLightingParams = useAppStore(s => s.setLightingParams)
   const addModel = useModelStore(s => s.addModel)
   const [newProjectName, setNewProjectName] = useState('')
+  const [isFinProject, setIsFinProject] = useState(false)
   const [showNewForm, setShowNewForm] = useState(false)
   const [openingId, setOpeningId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -38,9 +39,10 @@ export function ProjectListPage({ engineRef }: ProjectListPageProps) {
 
   const handleCreate = async () => {
     const name = newProjectName.trim() || `Project ${recentProjects.length + 1}`
-    const meta = await createProject(name)
+    const meta = await createProject(name, isFinProject)
     if (meta) {
       setNewProjectName('')
+      setIsFinProject(false)
       setShowNewForm(false)
       setStep('idle') // Switch to upload zone
     }
@@ -99,13 +101,19 @@ export function ProjectListPage({ engineRef }: ProjectListPageProps) {
       setTimeout(() => {
         const engine = engineRef.current
         if (engine && meta.camera) {
-          engine.world.camera.controls.setLookAt(
-            meta.camera.position[0], meta.camera.position[1], meta.camera.position[2],
-            meta.camera.target[0], meta.camera.target[1], meta.camera.target[2],
-            false
-          )
+          try {
+            if (engine.world.camera.controls) {
+              engine.world.camera.controls.setLookAt(
+                meta.camera.position[0], meta.camera.position[1], meta.camera.position[2],
+                meta.camera.target[0], meta.camera.target[1], meta.camera.target[2],
+                false
+              )
+            }
+          } catch (e) {
+            console.warn('Failed to restore camera position:', e)
+          }
         }
-      }, 200)
+      }, 500)
     }
   }
 
@@ -165,6 +173,18 @@ export function ProjectListPage({ engineRef }: ProjectListPageProps) {
             onKeyDown={e => e.key === 'Enter' && handleCreate()}
             autoFocus
           />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', padding: '0 4px' }}>
+            <input 
+              type="checkbox" 
+              id="fin-project-checkbox"
+              checked={isFinProject}
+              onChange={e => setIsFinProject(e.target.checked)}
+              style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--accent)' }}
+            />
+            <label htmlFor="fin-project-checkbox" style={{ fontSize: '13px', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+              Create as FIN Viewer Project
+            </label>
+          </div>
           <div className="project-new-form-actions">
             <button className="project-form-btn primary" onClick={handleCreate}>Select Location</button>
             <button className="project-form-btn" onClick={() => setShowNewForm(false)}>Cancel</button>
@@ -259,6 +279,12 @@ function ProjectCard({
           <span style={{ fontFamily: 'var(--font-mono)' }}>{project.models?.length || 0}</span> model{(project.models?.length !== 1) ? 's' : ''}
           <span className="project-card-meta-sep">·</span>
           {formatDate(project.updatedAt)}
+          {project.isFinProject && (
+            <>
+              <span className="project-card-meta-sep">·</span>
+              <span style={{ color: 'var(--accent)', fontWeight: 500 }}>FIN</span>
+            </>
+          )}
         </div>
       </div>
 

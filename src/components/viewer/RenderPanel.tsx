@@ -11,6 +11,7 @@ export function RenderPanel() {
   const bloomThreshold = useAppStore(s => s.bloomThreshold)
   const fogDensity = useAppStore(s => s.fogDensity)
   const cloudDensity = useAppStore(s => s.cloudDensity)
+  const cloudShadowsEnabled = useAppStore(s => s.cloudShadowsEnabled)
   const cloudSpeed = useAppStore(s => s.cloudSpeed)
   const dofEnabled = useAppStore(s => s.dofEnabled)
   const dofFocus = useAppStore(s => s.dofFocus)
@@ -165,6 +166,15 @@ export function RenderPanel() {
                   style={{ width: '100%', accentColor: 'var(--accent)' }} 
                 />
               </div>
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '8px', fontSize: '11px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                <input 
+                  type="checkbox" 
+                  checked={cloudShadowsEnabled}
+                  onChange={e => setLightingParams({ cloudShadowsEnabled: e.target.checked })}
+                  style={{ accentColor: 'var(--accent)', width: '14px', height: '14px', cursor: 'pointer' }}
+                />
+                Enable Cloud Shadows
+              </label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--text-secondary)' }}>
                   <span>Cloud Speed</span>

@@ -80,6 +80,29 @@ export interface ProjectMeta {
   } | null
   camera?: ProjectCamera
   renderSettings?: ProjectRenderSettings
+  isFinProject?: boolean
+  apiSettings?: ProjectApiSettings
+}
+
+export interface ProjectApiSettings {
+  finBaseUrl?: string
+  finProjectName?: string
+  finInterval?: number
+  finDirectMode?: boolean
+  finLivePoints?: Record<string, string>
+  finEndpoints?: Record<string, string>
+  weatherApiKey?: string
+  weatherLat?: number
+  weatherLon?: number
+
+  // Dashboard Configuration
+  navButtons?: Array<{ id: string, icon: string, tooltip: string, action: string, panel?: string, event?: string }>
+  leftCards?: Array<{ id: string, label: string, icon: string, accent: string, source: string, format?: string, field?: string }>
+  rightCards?: Array<{ id: string, label: string, icon: string, accent: string, source: string, format?: string, field?: string }>
+  sideButtons?: Array<{ id: string, icon: string, label: string, action: string, dashboard: string, enabled?: boolean }>
+  subPanels?: Record<string, { label: string, type: string }>
+  modelsConfig?: Array<{ id: string, label: string, name: string, active: boolean }>
+  floorsConfig?: Array<{ id: string, label: string, name: string }>
 }
 
 export interface ProjectModel extends ProjectModelEntry {

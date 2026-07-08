@@ -19,7 +19,7 @@
       rel="stylesheet"
     />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="/static/css/overview.css" rel="stylesheet" />
+    <link href="./static/css/overview.css" rel="stylesheet" />
     <style>
       /* ═══════════════════════════════════════════════════════════════
        DESIGN SYSTEM
@@ -626,7 +626,7 @@
       }
 
       .side-btn:hover {
-        width: 200px;
+        width: max-content;
         padding: 10px 18px;
         gap: 10px;
         background: var(--glass-bg);
@@ -636,7 +636,7 @@
 
       .side-btn:hover span {
         opacity: 1;
-        max-width: 150px;
+        max-width: 300px;
       }
 
       .side-btn.active {
@@ -1328,10 +1328,6 @@
         </div>
       </div>
 
-      <!-- Admin Toggle Button -->
-      <button class="admin-toggle" id="adminToggle" title="Dashboard Admin">
-        <i class="bx bx-cog"></i>
-      </button>
     </div>
 
     <!-- FIN Login Modal Overlay -->
@@ -1553,25 +1549,28 @@
       </div>
     </div>
 
-    <!-- ═══════════════════════════════════════════════════════════════
-       JAVASCRIPT — Dashboard Engine
-       ═══════════════════════════════════════════════════════════════ -->
+    <button class="admin-toggle" id="adminToggle" title="Dashboard Settings">
+      <i class="bx bx-cog"></i>
+    </button>
+
     <script>
-      // ═══════════════════════════════════════════════════════════════
       //  DEFAULT CONFIGURATION
-      // ═══════════════════════════════════════════════════════════════
+      const _injected = window.INJECTED_PROJECT_CONFIG || {};
       const DEFAULT_CONFIG = {
         fin: {
-          baseUrl: "https://localhost",
-          project: "adnocWarsan",
-          interval: 5000,
+          baseUrl: (_injected.fin && _injected.fin.baseUrl) || "https://localhost",
+          project: (_injected.fin && _injected.fin.project) || "EllisdonDemo",
+          interval: (_injected.fin && _injected.fin.interval) || 5000,
+          directMode: (_injected.fin && _injected.fin.directMode) || false,
+          livePoints: (_injected.fin && _injected.fin.livePoints) || undefined,
+          endpoints: (_injected.fin && _injected.fin.endpoints) || undefined,
         },
         weather: {
-          lat: 24.469,
-          lon: 54.358,
-          apiKey: "88214bff7aa566e9f6ff1ba5db38f65f",
+          lat: (_injected.weather && _injected.weather.lat) || 24.469,
+          lon: (_injected.weather && _injected.weather.lon) || 54.358,
+          apiKey: (_injected.weather && _injected.weather.apiKey) || "88214bff7aa566e9f6ff1ba5db38f65f",
         },
-        navButtons: [
+        navButtons: _injected.navButtons || [
           {
             id: "floor-nav",
             icon: "bx bx-show",
@@ -1643,7 +1642,7 @@
             event: "help",
           },
         ],
-        leftCards: [
+        leftCards: _injected.leftCards || [
           {
             id: "date",
             label: "Date",
@@ -1669,7 +1668,7 @@
             field: "temp",
           },
         ],
-        rightCards: [
+        rightCards: _injected.rightCards || [
           {
             id: "humid",
             label: "Humidity",
@@ -1695,7 +1694,7 @@
             field: "description",
           },
         ],
-        sideButtons: [
+        sideButtons: _injected.sideButtons || [
           {
             id: "overview",
             icon: "bx bx-bar-chart-alt-2",
@@ -1739,14 +1738,14 @@
             dashboard: "maintenance",
           },
         ],
-        subPanels: {
+        subPanels: _injected.subPanels || {
           treeViewer: { label: "Model Layers", type: "model-toggle" },
           floorIsolation: { label: "Floor Isolation", type: "floor-toggle" },
           rulerPanel: { label: "Measurement", type: "ruler" },
           visualSettings: { label: "Visual Settings", type: "sliders" },
           settingsPanel: { label: "Sky Mode", type: "sky-mode" },
         },
-        widgets: [
+        widgets: _injected.widgets || [
           {
             id: "hvac",
             name: "HVAC Statistics",
@@ -1811,12 +1810,12 @@
             category: "Emergency",
           },
         ],
-        models: [
+        models: _injected.modelsConfig || [
           { id: "ARCH", label: "A", name: "Architecture", active: true },
           { id: "MECH", label: "M", name: "Mechanical", active: false },
           { id: "STRUCT", label: "ST", name: "Structure", active: true },
         ],
-        floors: [
+        floors: _injected.floorsConfig || [
           { id: "RF", label: "RF", name: "Roof Floor" },
           { id: "1F", label: "1F", name: "First Floor" },
           { id: "GF", label: "GF", name: "Ground Floor" },
@@ -1824,9 +1823,7 @@
         ],
       };
 
-      // ═══════════════════════════════════════════════════════════════
       //  DASHBOARD ENGINE
-      // ═══════════════════════════════════════════════════════════════
       const Dashboard = {
         config: null,
         liveData: {
@@ -1840,12 +1837,48 @@
         finInterval: null,
 
         init() {
-          this.config = this.loadConfig();
-          this.render();
-          this.startClock();
-          this.startWeather();
-          this.startFinPolling();
-          this.initResizeObserver();
+          const initWithConfig = () => {
+            this.config = this.loadConfig();
+            this.render();
+            this.startClock();
+            this.startWeather();
+            this.startFinPolling();
+            this.initResizeObserver();
+            this._finishInit();
+          };
+
+          // If no React-injected config, try loading api-config.json (standalone FIN viewer mode)
+          if (!window.INJECTED_PROJECT_CONFIG) {
+            fetch('api-config.json?t=' + Date.now(), { cache: 'no-store' })
+              .then(r => r.ok ? r.json() : null)
+              .then(cfg => {
+                if (cfg) {
+                  window.INJECTED_PROJECT_CONFIG = {
+                    fin: {
+                      baseUrl: cfg.fin_server_url || 'https://localhost',
+                      project: cfg.project_name || '',
+                      interval: cfg.polling_interval || 5000,
+                      directMode: cfg.direct_mode || false,
+                      livePoints: cfg.live_point_ids || undefined,
+                      endpoints: cfg.power_endpoints || undefined,
+                    },
+                    weather: cfg.weather || undefined,
+                    navButtons: cfg.navButtons || undefined,
+                    leftCards: cfg.leftCards || undefined,
+                    rightCards: cfg.rightCards || undefined,
+                    sideButtons: cfg.sideButtons || undefined,
+                  };
+                  console.log('[Dashboard] Loaded api-config.json for standalone mode');
+                }
+                initWithConfig();
+              })
+              .catch(() => initWithConfig());
+          } else {
+            initWithConfig();
+          }
+        },
+
+        _finishInit() {
 
           window.addEventListener("dashboard-event", async (e) => {
             const dashboardId = e.detail.data;
@@ -1855,20 +1888,18 @@
             ) {
               const container = document.getElementById("dashboardsContainer");
               if (!document.getElementById("overviewDashboard")) {
-                // First time: fetch and inject
                 try {
-                  const res = await fetch("/static/html/overview.html?t=" + Date.now());
+                  const res = await fetch("static/html/overview.html?t=" + Date.now());
                   const html = await res.text();
                   container.innerHTML = html;
                   if (window.OverviewDashboard) {
-                    window.OverviewDashboard.initialized = false; // ensure clean init
+                    window.OverviewDashboard.initialized = false;
                     window.OverviewDashboard.init();
                   }
                 } catch (err) {
                   console.error("Failed to load overview dashboard", err);
                 }
               } else {
-                // Re-show: just make visible and force repaint
                 const dash = document.getElementById("overviewDashboard");
                 dash.style.visibility = "visible";
                 dash.style.opacity = "1";
@@ -1891,15 +1922,25 @@
         },
 
         initResizeObserver() {
-          // Removed artificial scaling to allow native responsive CSS and prevent stretching
         },
 
         loadConfig() {
+          let config = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
           try {
             const saved = localStorage.getItem("dt-dashboard-config");
-            if (saved) return JSON.parse(saved);
+            if (saved) {
+              const parsed = JSON.parse(saved);
+              config = { ...config, ...parsed };
+              
+              // Ensure injected settings from the React App (if present) always override local storage
+              if (_injected.fin) config.fin = { ...config.fin, ..._injected.fin };
+              if (_injected.navButtons) config.navButtons = _injected.navButtons;
+              if (_injected.leftCards) config.leftCards = _injected.leftCards;
+              if (_injected.rightCards) config.rightCards = _injected.rightCards;
+              if (_injected.sideButtons) config.sideButtons = _injected.sideButtons;
+            }
           } catch (e) {}
-          return JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+          return config;
         },
 
         saveConfig() {
@@ -1961,7 +2002,8 @@
             el.className = "side-btn";
             el.id = `side-${btn.id}`;
             el.href = "#";
-            el.innerHTML = `<i class="${btn.icon}"></i><span>${btn.label}</span>`;
+            el.title = btn.label || "";
+            el.innerHTML = `<i class="${btn.icon}"></i><span title="${btn.label || ""}">${btn.label}</span>`;
             el.addEventListener("click", (e) => {
               e.preventDefault();
               this.handleSideClick(btn, el);
@@ -2119,7 +2161,6 @@
           window.dispatchEvent(
             new CustomEvent("dashboard-event", { detail: { event, data } }),
           );
-          // Also postMessage to parent window if running in an iframe
           if (window.parent !== window) {
             window.parent.postMessage(
               { type: "dashboard-event", detail: { event, data } },
@@ -2205,32 +2246,198 @@
           if (this.finInterval) clearInterval(this.finInterval);
           const fetchFin = async () => {
             try {
-              // Now we fetch from our local Python backend instead of directly from FIN
-              const backendUrl = "http://127.0.0.1:8000";
-              
-              const [powerRes, equipRes] = await Promise.all([
-                fetch(`${backendUrl}/api/fin/power-live`).catch(() => null),
-                fetch(`${backendUrl}/api/fin/equip-live`).catch(() => null),
-              ]);
-              
-              if (powerRes?.ok) {
-                const powerData = await powerRes.json();
-                this.liveData.power = powerData;
-              }
-              
-              if (equipRes?.ok) {
-                const equipData = await equipRes.json();
-                this.liveData.equipment = equipData.equipment || [];
-                // Generate flat points array for backward compatibility
-                let allPoints = [];
-                this.liveData.equipment.forEach(eq => {
-                  if (eq.points) allPoints.push(...eq.points);
+              const isFinHosted = window.location.href.includes('finMobile') || this.config.fin?.directMode;
+              if (isFinHosted) {
+                // --- DIRECT API MODE (NO BACKEND) ---
+                console.log("[Dashboard] Direct FIN Mode Enabled: Fetching batch data directly from FIN...");
+                const baseUrl = this.config.fin.baseUrl?.replace(/\/$/, '') || "https://localhost";
+                const project = this.config.fin.project || "marsaAlArab";
+                const livePoints = this.config.fin.livePoints || {};
+                const endpoints = this.config.fin.endpoints || {};
+                
+                const powerData = { timestamp: new Date().toISOString(), power_history: {} };
+                
+                const decodeHaystackStr = (str) => String(str).replace(/u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+                
+                const getHaystackVal = (v) => {
+                    if (v === null || v === undefined) return v;
+                    if (typeof v === 'object') {
+                        if (v._kind === 'number') return v.val;
+                        if (v._kind === 'ref') return decodeHaystackStr(v.val || '');
+                        if (v._kind === 'str') return decodeHaystackStr(v.val || '');
+                    }
+                    if (typeof v === 'string') return decodeHaystackStr(v);
+                    return v;
+                };
+
+                const fetchOptions = { headers: { "Content-Type": "application/json", "Accept": "application/json" } };
+                
+                // Fetch Points and Equipment in Parallel
+                console.log(`[Dashboard] Fetching from FIN API: ${baseUrl}/api/${project}/read?filter=point`);
+                const [pointsRes, equipRes] = await Promise.all([
+                    fetch(`${baseUrl}/api/${project}/read?filter=point`, fetchOptions).catch(e => {
+                        console.error("[Dashboard] Fetch failed for points:", e);
+                        return null;
+                    }),
+                    fetch(`${baseUrl}/api/${project}/read?filter=equip`, fetchOptions).catch(e => {
+                        console.error("[Dashboard] Fetch failed for equipment:", e);
+                        return null;
+                    }),
+                ]);
+
+                console.log(`[Dashboard] API Response Status - Points: ${pointsRes?.status}, Equip: ${equipRes?.status}`);
+
+                let pointsRows = [];
+                if (pointsRes?.ok) {
+                    const data = await pointsRes.json();
+                    pointsRows = data.rows || [];
+                    console.log(`[Dashboard] Successfully fetched ${pointsRows.length} points from FIN`);
+                } else {
+                    console.error("[Dashboard] Points API error response:", await pointsRes?.text());
+                }
+
+                let equipRows = [];
+                if (equipRes?.ok) {
+                    const data = await equipRes.json();
+                    equipRows = data.rows || [];
+                    console.log(`[Dashboard] Successfully fetched ${equipRows.length} equipment from FIN`);
+                } else {
+                    console.error("[Dashboard] Equip API error response:", await equipRes?.text());
+                }
+
+                // Map points to power data
+                Object.entries(livePoints).forEach(([key, ptStr]) => {
+                    if (!ptStr) return;
+                    const ptId = ptStr.replace(/{project}/g, project).replace(/^@/, '').replace(/^.?:/, '');
+                    const matchedRow = pointsRows.find(r => getHaystackVal(r.id) === ptId || getHaystackVal(r.id) === ptId.replace(/^@/, ''));
+                    if (matchedRow) {
+                        powerData[key] = getHaystackVal(matchedRow.curVal) || 0;
+                    }
                 });
-                this.liveData.points = allPoints;
+                
+                // Calculate averages
+                let tempSum = 0, tempCount = 0, humSum = 0, humCount = 0, co2Sum = 0, co2Count = 0;
+                pointsRows.forEach(row => {
+                    const navName = (getHaystackVal(row.navName) || getHaystackVal(row.dis) || "").toLowerCase();
+                    const val = getHaystackVal(row.curVal);
+                    if (typeof val === 'number') {
+                        if (navName.includes('temp')) { tempSum += val; tempCount++; }
+                        if (navName.includes('hum')) { humSum += val; humCount++; }
+                        if (navName.includes('co2')) { co2Sum += val; co2Count++; }
+                    }
+                });
+                powerData.avg_temp = tempCount ? (tempSum / tempCount) : 0;
+                powerData.avg_hum = humCount ? (humSum / humCount) : 0;
+                powerData.avg_co2 = co2Count ? (co2Sum / co2Count) : 0;
+                
+                const parseHistory = (text) => {
+                  if (!text) return [];
+                  const lines = text.split('\n');
+                  let dataStart = -1;
+                  for (let i = 0; i < lines.length; i++) {
+                    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(lines[i])) { dataStart = i; break; }
+                  }
+                  const rows = [];
+                  if (dataStart !== -1) {
+                    for (let i = dataStart; i < lines.length; i++) {
+                      const line = lines[i].trim();
+                      if (!line || !line.includes(',')) continue;
+                      const parts = line.split(',', 2);
+                      const tsPart = parts[0].replace(' Dubai', '').trim();
+                      const valStr = parts[1].trim();
+                      try {
+                        const val = parseFloat(valStr.replace(/[^0-9.-]/g, ''));
+                        const dt = new Date(tsPart.split('.')[0]);
+                        if (!isNaN(val) && !isNaN(dt.getTime())) rows.push({ date: dt, value: val });
+                      } catch(e) {}
+                    }
+                  }
+                  return rows;
+                };
+
+                const MONTHS_ORDER = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+                const AM_PM_LOOKUP = ['12 am', '1 am', '2 am', '3 am', '4 am', '5 am', '6 am', '7 am', '8 am', '9 am', '10 am', '11 am', '12 pm', '1 pm', '2 pm', '3 pm', '4 pm', '5 pm', '6 pm', '7 pm', '8 pm', '9 pm', '10 pm', '11 pm'];
+
+                const aggregateHistory = (data) => {
+                  if (!data || data.length === 0) return {};
+                  data.sort((a,b) => a.date - b.date);
+                  const aggMap = {};
+                  for (const item of data) {
+                    const y = item.date.getFullYear(), m = item.date.getMonth(), d = item.date.getDate(), h = item.date.getHours();
+                    const key = `${y}-${m}-${d}-${h}`;
+                    if (!aggMap[key]) aggMap[key] = { sum: 0, count: 0, y, m, d, h };
+                    aggMap[key].sum += item.value;
+                    aggMap[key].count += 1;
+                  }
+                  const nested = {};
+                  for (const key in aggMap) {
+                    const agg = aggMap[key];
+                    const yStr = String(agg.y), mName = MONTHS_ORDER[agg.m], dKey = `${mName} ${agg.d}`, hName = AM_PM_LOOKUP[agg.h];
+                    if (!nested[yStr]) nested[yStr] = {};
+                    if (!nested[yStr][mName]) nested[yStr][mName] = {};
+                    if (!nested[yStr][mName][dKey]) {
+                      nested[yStr][mName][dKey] = {};
+                      for (const hr of AM_PM_LOOKUP) nested[yStr][mName][dKey][hr] = null;
+                    }
+                    nested[yStr][mName][dKey][hName] = (agg.sum / agg.count).toFixed(2);
+                  }
+                  return nested;
+                };
+
+                // Fetch History
+                const histPromises = Object.entries(endpoints).map(async ([key, expr]) => {
+                  if (!expr) return;
+                  const finalExpr = expr.replace(/{project}/g, project);
+                  try {
+                    const res = await fetch(finalExpr.startsWith('/') ? `${baseUrl}${finalExpr}` : `${baseUrl}/${finalExpr}`);
+                    if (res.ok) powerData.power_history[key] = aggregateHistory(parseHistory(await res.text()));
+                  } catch(e) {}
+                });
+                
+                await Promise.all(histPromises);
+                
+                this.liveData.power = powerData;
+                this.liveData.equipment = equipRows.map(r => ({
+                    id: getHaystackVal(r.id),
+                    navName: getHaystackVal(r.navName) || getHaystackVal(r.dis) || "Unknown",
+                    points: [] // Link points if needed
+                }));
+                this.liveData.points = pointsRows.map(r => ({
+                    id: getHaystackVal(r.id),
+                    navName: getHaystackVal(r.navName) || getHaystackVal(r.dis) || "Unknown",
+                    curVal: getHaystackVal(r.curVal)
+                }));
+                
+                DashboardAdmin.updateFinStatus(true);
+                this.emit("fin-data-updated", this.liveData);
+
+              } else {
+                // --- BACKEND MODE ---
+                const backendUrl = "http://127.0.0.1:8000";
+                
+                const [powerRes, equipRes] = await Promise.all([
+                  fetch(`${backendUrl}/api/fin/power-live`).catch(() => null),
+                  fetch(`${backendUrl}/api/fin/equip-live`).catch(() => null),
+                ]);
+                
+                if (powerRes?.ok) {
+                  const powerData = await powerRes.json();
+                  this.liveData.power = powerData;
+                }
+                
+                if (equipRes?.ok) {
+                  const equipData = await equipRes.json();
+                  this.liveData.equipment = equipData.equipment || [];
+                  let allPoints = [];
+                  this.liveData.equipment.forEach(eq => {
+                    if (eq.points) allPoints.push(...eq.points);
+                  });
+                  this.liveData.points = allPoints;
+                }
+                
+                DashboardAdmin.updateFinStatus(true);
+                this.emit("fin-data-updated", this.liveData);
               }
-              
-              DashboardAdmin.updateFinStatus(true);
-              this.emit("fin-data-updated", this.liveData);
             } catch (e) {
               console.error("FIN Polling Error:", e);
               DashboardAdmin.updateFinStatus(false);
@@ -2282,16 +2489,15 @@
         },
       };
 
-      // ═══════════════════════════════════════════════════════════════
       //  ADMIN PANEL
-      // ═══════════════════════════════════════════════════════════════
       const DashboardAdmin = {
         isOpen: false,
 
         init() {
-          document
-            .getElementById("adminToggle")
-            .addEventListener("click", () => this.toggle());
+          const toggleBtn = document.getElementById("adminToggle");
+          if (toggleBtn) {
+            toggleBtn.addEventListener("click", () => this.toggle());
+          }
 
           // Tab switching
           document.querySelectorAll(".admin-tab").forEach((tab) => {
@@ -2303,20 +2509,19 @@
                 .querySelectorAll(".admin-section")
                 .forEach((s) => s.classList.remove("active"));
               tab.classList.add("active");
-              document
-                .querySelector(`[data-section="${tab.dataset.tab}"]`)
-                .classList.add("active");
+              const section = document.querySelector(`[data-section="${tab.dataset.tab}"]`);
+              if (section) section.classList.add("active");
               this.refreshActiveTab(tab.dataset.tab);
             });
           });
 
-          // Load FIN config into inputs
-          document.getElementById("finBaseUrl").value =
-            Dashboard.config.fin.baseUrl;
-          document.getElementById("finProject").value =
-            Dashboard.config.fin.project;
-          document.getElementById("finInterval").value =
-            Dashboard.config.fin.interval;
+          // Load FIN config into inputs if they exist
+          const finBaseInput = document.getElementById("finBaseUrl");
+          if (finBaseInput) finBaseInput.value = Dashboard.config.fin.baseUrl;
+          const finProjectInput = document.getElementById("finProject");
+          if (finProjectInput) finProjectInput.value = Dashboard.config.fin.project;
+          const finIntervalInput = document.getElementById("finInterval");
+          if (finIntervalInput) finIntervalInput.value = Dashboard.config.fin.interval;
 
           this.refreshActiveTab("nav-buttons");
         },
@@ -2644,6 +2849,6 @@
         DashboardAdmin.init();
       });
     </script>
-    <script src="/static/js/overview.js"></script>
+    <script src="./static/js/overview.js"></script>
   </body>
 </html>

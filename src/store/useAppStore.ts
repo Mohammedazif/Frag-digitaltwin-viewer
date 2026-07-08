@@ -15,6 +15,7 @@ interface AppState {
   bloomThreshold: number
   fogDensity: number
   cloudDensity: number
+  cloudShadowsEnabled: boolean
   cloudSpeed: number
   dofEnabled: boolean
   dofFocus: number
@@ -29,7 +30,7 @@ interface AppState {
   setProgress: (progress: number, label?: string) => void
   setError: (error: string) => void
   setRealisticMode: (enabled: boolean) => void
-  setLightingParams: (params: Partial<{ exposure: number, lightIntensity: number, ambientIntensity: number, timeOfDay: number, bloomStrength: number, bloomThreshold: number, fogDensity: number, cloudDensity: number, cloudSpeed: number, dofEnabled: boolean, dofFocus: number, dofAperture: number, dofMaxBlur: number, visualSaturation: number, visualTemperature: number, visualContrast: number, visualVignette: number }>) => void
+  setLightingParams: (params: Partial<{ exposure: number, lightIntensity: number, ambientIntensity: number, timeOfDay: number, bloomStrength: number, bloomThreshold: number, fogDensity: number, cloudDensity: number, cloudShadowsEnabled: boolean, cloudSpeed: number, dofEnabled: boolean, dofFocus: number, dofAperture: number, dofMaxBlur: number, visualSaturation: number, visualTemperature: number, visualContrast: number, visualVignette: number }>) => void
   reset: () => void
 }
 
@@ -47,6 +48,7 @@ export const useAppStore = create<AppState>((set) => ({
   bloomThreshold: 1.5,
   fogDensity: 0.00015,
   cloudDensity: 0.5,
+  cloudShadowsEnabled: true,
   cloudSpeed: 1.0,
   dofEnabled: false,
   dofFocus: 2000.0,

@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { Box3 } from 'three'
+import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { useModelStore } from '@/store/useModelStore'
 import type { FragmentsEngine } from '@/lib/fragmentsEngine'
@@ -93,6 +94,20 @@ export function useModelLoader(engineRef: React.MutableRefObject<FragmentsEngine
 
         engine.world.scene.three.add(model.object)
         await engine.fragments.update(true)
+
+        // IFC spaces
+        try {
+          const spaceLocalIds = await model.getItemsByQuery({
+            categories: [/IFCSPACE/]
+          })
+          
+          if (spaceLocalIds && spaceLocalIds.length > 0) {
+            await model.setOpacity(spaceLocalIds, 0.01)
+            // await model.setColor(spaceLocalIds, new THREE.Color(0x88ccff))
+          }
+        } catch (e) {
+          console.warn('[GlassSpaces] Could not apply glass spaces styling:', e)
+        }
 
         if (fitToBox) {
           try {

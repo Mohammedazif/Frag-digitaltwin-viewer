@@ -95,7 +95,7 @@ export async function deleteFile(dir: FileSystemDirectoryHandle, filename: strin
 // ─── Project Operations ───────────────────────────────────────────────────────
 
 /** Pick a parent folder and create a new project subfolder inside it */
-export async function createProjectInFolder(name: string): Promise<FolderProject | null> {
+export async function createProjectInFolder(name: string, isFinProject?: boolean): Promise<FolderProject | null> {
   try {
     // 1. User picks a workspace/parent folder
     const parentHandle = await (window as any).showDirectoryPicker({ 
@@ -119,6 +119,7 @@ export async function createProjectInFolder(name: string): Promise<FolderProject
       updatedAt: Date.now(),
       models: [],
       geolocation: null,
+      isFinProject,
     }
 
     await writeJson(handle, 'project.json', meta)
@@ -327,3 +328,80 @@ export async function exportProjectAsZip(handle: FileSystemDirectoryHandle, meta
 
   return zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 3 } })
 }
+
+/** Export FIN Project as a lightweight static viewer ZIP */
+export async function exportFinProjectAsZip(handle: FileSystemDirectoryHandle, meta: ProjectMeta): Promise<Blob> {
+  const JSZip = (await import('jszip')).default
+  const zip = new JSZip()
+
+  // 1. Add project config and models at the root
+  // Force finDirectMode to true for the FIN standalone viewer since there is no backend
+  const finMeta = { ...meta, apiSettings: { ...(meta.apiSettings || {}), finDirectMode: true } }
+  zip.file('project.json', JSON.stringify(finMeta, null, 2))
+
+  // Also include api-config.json for standalone FIN dashboard (direct API mode)
+  const apiSettings = meta.apiSettings || {}
+  const apiConfig = {
+    project_name: apiSettings.finProjectName || meta.name,
+    fin_server_url: apiSettings.finBaseUrl || 'https://localhost',
+    direct_mode: true, // Always true for FIN standalone viewer
+    polling_interval: apiSettings.finInterval || 5000,
+    live_point_ids: apiSettings.finLivePoints || {},
+    power_endpoints: apiSettings.finEndpoints || {},
+    weather: {
+      lat: apiSettings.weatherLat ?? 24.469,
+      lon: apiSettings.weatherLon ?? 54.358,
+      apiKey: apiSettings.weatherApiKey || '88214bff7aa566e9f6ff1ba5db38f65f',
+    },
+    navButtons: apiSettings.navButtons,
+    leftCards: apiSettings.leftCards,
+    rightCards: apiSettings.rightCards,
+    sideButtons: apiSettings.sideButtons,
+  }
+  zip.file('api-config.json', JSON.stringify(apiConfig, null, 2))
+
+  const modelsDir = await handle.getDirectoryHandle('models', { create: true })
+  const zipModelsFolder = zip.folder('models')!
+  for (const entry of meta.models) {
+    const ext = entry.type === 'glb' ? 'glb' : 'frag'
+    const fileName = `${entry.modelId}.${ext}`
+    const bytes = await readBinary(modelsDir, fileName)
+    if (bytes) zipModelsFolder.file(fileName, bytes)
+  }
+
+  try {
+    const thumbFh = await handle.getFileHandle('thumbnail.webp')
+    const thumbFile = await thumbFh.getFile()
+    zip.file('thumbnail.webp', await thumbFile.arrayBuffer())
+  } catch { /* no thumbnail yet */ }
+
+  // 2. Add static Viewer App directly to root structure (No backend)
+  try {
+    const res = await fetch('/viewer-assets.json?t=' + Date.now(), { cache: 'no-store' })
+    if (!res.ok) {
+      throw new Error("Viewer assets not bundled. You must run `npm run build` in the studio first.")
+    }
+
+    const files: { path: string, content: string }[] = await res.json()
+    for (const f of files) {
+      if (f.path === 'index.html') continue // Skip main studio app
+      
+      if (f.path === 'viewer.html') {
+        // Rename viewer.html to index.html and fix paths to be relative for static serving
+        let htmlContent = atob(f.content)
+        htmlContent = htmlContent.replace(/(href|src)="\/assets\//g, '$1="assets/')
+        htmlContent = htmlContent.replace(/(href|src)="\/vite\.svg"/g, '$1="vite.svg"')
+        zip.file('index.html', htmlContent)
+      } else {
+        // e.g. assets/viewer-123.js
+        zip.file(f.path, f.content, { base64: true })
+      }
+    }
+  } catch (err) {
+    console.error("Failed to include viewer assets in FIN zip", err)
+    throw new Error("Failed to bundle static viewer assets. Check console.")
+  }
+
+  return zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 3 } })
+}
+

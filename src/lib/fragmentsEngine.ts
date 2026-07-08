@@ -1,5 +1,6 @@
 import * as FRAGS from '@thatopen/fragments'
 import { CloudShader } from './CloudShader'
+import { CloudShadowShader } from './CloudShadowShader'
 import * as OBC from '@thatopen/components'
 import * as THREE from 'three'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
@@ -22,7 +23,7 @@ export interface FragmentsEngine {
   world: any
   components: OBC.Components
   dispose: () => Promise<void>
-  setLightingParams: (params: { realisticMode: boolean, exposure: number, lightIntensity: number, ambientIntensity: number, timeOfDay: number, bloomStrength: number, bloomThreshold: number, fogDensity: number, cloudDensity: number, cloudSpeed: number, dofEnabled: boolean, dofFocus: number, dofAperture: number, dofMaxBlur: number, visualSaturation?: number, visualTemperature?: number, visualContrast?: number, visualVignette?: number }) => void
+  setLightingParams: (params: { realisticMode: boolean, exposure: number, lightIntensity: number, ambientIntensity: number, timeOfDay: number, bloomStrength: number, bloomThreshold: number, fogDensity: number, cloudDensity: number, cloudShadowsEnabled?: boolean, cloudSpeed: number, dofEnabled: boolean, dofFocus: number, dofAperture: number, dofMaxBlur: number, visualSaturation?: number, visualTemperature?: number, visualContrast?: number, visualVignette?: number }) => void
 }
 
 export async function initFragmentsEngine(
@@ -93,6 +94,7 @@ export async function initFragmentsEngine(
   rDir.shadow.camera.bottom = -5000
   rDir.shadow.bias = -0.0005
   rDir.shadow.normalBias = 0.05
+  rDir.shadow.camera.layers.enable(11) // Enable shadow camera to see the invisible shadow gobo
 
   // Clouds (Procedural Shader Dome)
   const cloudGeo = new THREE.SphereGeometry(190000, 64, 64)
@@ -107,7 +109,7 @@ export async function initFragmentsEngine(
   })
   
   const cloudsDome = new THREE.Mesh(cloudGeo, cloudMat)
-  
+
   realisticGroup.add(sky, rAmbient, rDir, cloudsDome)
   world.scene.three.add(realisticGroup)
 
@@ -118,12 +120,18 @@ export async function initFragmentsEngine(
   let ssaoPass: any
   let ssrPass: any
   let colorGradePass: any
+  let cloudShadowPass: any
 
-  const setLightingParams = (params: { realisticMode: boolean, exposure: number, lightIntensity: number, ambientIntensity: number, timeOfDay: number, bloomStrength: number, bloomThreshold: number, fogDensity: number, cloudDensity: number, cloudSpeed: number, dofEnabled: boolean, dofFocus: number, dofAperture: number, dofMaxBlur: number, visualSaturation?: number, visualTemperature?: number, visualContrast?: number, visualVignette?: number }) => {
+  const setLightingParams = (params: { realisticMode: boolean, exposure: number, lightIntensity: number, ambientIntensity: number, timeOfDay: number, bloomStrength: number, bloomThreshold: number, fogDensity: number, cloudDensity: number, cloudShadowsEnabled?: boolean, cloudSpeed: number, dofEnabled: boolean, dofFocus: number, dofAperture: number, dofMaxBlur: number, visualSaturation?: number, visualTemperature?: number, visualContrast?: number, visualVignette?: number }) => {
     isRealistic = params.realisticMode
     cloudMat.uniforms.cloudDensity.value = params.cloudDensity
     currentCloudSpeed = params.cloudSpeed
     cloudsDome.visible = params.cloudDensity > 0
+    
+    if (cloudShadowPass) {
+      cloudShadowPass.enabled = params.realisticMode && params.cloudDensity > 0 && params.cloudShadowsEnabled !== false
+      cloudShadowPass.uniforms.cloudDensity.value = params.cloudDensity
+    }
     
     if (bokehPass) {
       bokehPass.enabled = params.dofEnabled
@@ -195,6 +203,16 @@ export async function initFragmentsEngine(
       const phi = Math.PI / 2 - altitudeRad
       const theta = azimuthRad + Math.PI / 2
       
+      // Ensure sky does not receive shadows (prevents giant black blobs in the sky)
+      if (sky) {
+        sky.receiveShadow = false
+        sky.castShadow = false
+      }
+      if (cloudsDome) {
+        cloudsDome.receiveShadow = false
+        cloudsDome.castShadow = false
+      }
+      
       const sunPosition = new THREE.Vector3()
       sunPosition.setFromSphericalCoords(10000, phi, theta)
       sky.material.uniforms['sunPosition'].value.copy(sunPosition)
@@ -261,14 +279,14 @@ export async function initFragmentsEngine(
   world.camera = new OBC.SimpleCamera(components)
 
   if (world.camera.three instanceof THREE.PerspectiveCamera || world.camera.three instanceof THREE.OrthographicCamera) {
-    world.camera.three.near = 5
+    world.camera.three.near = 0.1
     world.camera.three.far = 200000
     world.camera.three.updateProjectionMatrix()
   }
 
   if (world.camera.controls) {
     world.camera.controls.maxDistance = Infinity
-    world.camera.controls.minDistance = 5
+    world.camera.controls.minDistance = 0.1
     world.camera.controls.dollySpeed = 2
     world.camera.controls.truckSpeed = 2
     world.camera.controls.infinityDolly = true
@@ -279,8 +297,21 @@ export async function initFragmentsEngine(
 
   // Postprocessing (SMAA only, Bloom disabled to prevent white blowouts on close surfaces)
   const composer = new EffectComposer(world.renderer.three)
+  
+  // Create a depth texture for BOTH render targets so post-processing passes can read world depth on every frame
+  // (EffectComposer alternates between renderTarget1 and renderTarget2, so both must have depth attached!)
+  composer.renderTarget1.depthTexture = new THREE.DepthTexture(window.innerWidth, window.innerHeight)
+  composer.renderTarget1.depthBuffer = true
+  composer.renderTarget2.depthTexture = new THREE.DepthTexture(window.innerWidth, window.innerHeight)
+  composer.renderTarget2.depthBuffer = true
+  
   const renderPass = new RenderPass(world.scene.three, world.camera.three)
   composer.addPass(renderPass)
+
+  // Cloud Shadow Post-Processing Pass
+  cloudShadowPass = new ShaderPass(CloudShadowShader)
+  cloudShadowPass.enabled = false
+  composer.addPass(cloudShadowPass)
 
   ssaoPass = new SSAOPass(world.scene.three, world.camera.three, window.innerWidth, window.innerHeight)
   ssaoPass.kernelRadius = 16
@@ -332,6 +363,17 @@ export async function initFragmentsEngine(
       
       cloudMat.uniforms.time.value += delta * currentCloudSpeed
       
+      if (cloudShadowPass && cloudShadowPass.enabled) {
+        // Read depth from the currently active read buffer to prevent flickering
+        cloudShadowPass.uniforms.tDepth.value = composer.readBuffer.depthTexture
+        cloudShadowPass.uniforms.time.value = cloudMat.uniforms.time.value
+        cloudShadowPass.uniforms.sunPosition.value = cloudMat.uniforms.sunPosition.value
+        cloudShadowPass.uniforms.cameraNear.value = world.camera.three.near
+        cloudShadowPass.uniforms.cameraFar.value = world.camera.three.far
+        cloudShadowPass.uniforms.projectionMatrixInverse.value.copy(world.camera.three.projectionMatrixInverse)
+        cloudShadowPass.uniforms.viewMatrixInverse.value.copy(world.camera.three.matrixWorld)
+      }
+      
       if (rDir.userData.sunOffset && world.camera.controls) {
         const target = new THREE.Vector3()
         world.camera.controls.getTarget(target)
@@ -362,6 +404,7 @@ export async function initFragmentsEngine(
   })
 
   components.init()
+
 
   const grids = components.get(OBC.Grids)
   const grid = grids.create(world)

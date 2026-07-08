@@ -30,13 +30,14 @@ interface ProjectState {
 
   // Actions
   loadRecentProjects: () => Promise<void>
-  createProject: (name: string) => Promise<ProjectMeta | null>
+  createProject: (name: string, isFinProject?: boolean) => Promise<ProjectMeta | null>
   openProject: () => Promise<ProjectMeta | null>
   openRecentProject: (handle: FileSystemDirectoryHandle) => Promise<ProjectMeta | null>
   closeProject: () => void
   saveProject: () => Promise<void>
   deleteRecentProject: (projectId: string) => Promise<void>
   exportAsZip: () => Promise<void>
+  exportFinProjectAsZip: () => Promise<void>
 
   // Model management within project
   addModelEntry: (model: LoadedModel) => Promise<ProjectModelEntry | null>
@@ -87,8 +88,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set({ recentProjects: valid, isLoading: false })
   },
 
-  createProject: async (name: string) => {
-    const result = await createProjectInFolder(name)
+  createProject: async (name: string, isFinProject?: boolean) => {
+    const result = await createProjectInFolder(name, isFinProject)
     if (!result) return null
     const { meta, handle } = result
 
@@ -168,6 +169,20 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const a = document.createElement('a')
     a.href = url
     a.download = `${currentProject.name.replace(/[^a-z0-9]/gi, '_')}_project.zip`
+    a.click()
+    URL.revokeObjectURL(url)
+  },
+
+  exportFinProjectAsZip: async () => {
+    const { currentProject, folderHandle } = get()
+    if (!currentProject || !folderHandle) return
+
+    const { exportFinProjectAsZip } = await import('@/lib/projectDb')
+    const blob = await exportFinProjectAsZip(folderHandle, currentProject)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${currentProject.name.replace(/[^a-z0-9]/gi, '_')}_FIN_viewer.zip`
     a.click()
     URL.revokeObjectURL(url)
   },

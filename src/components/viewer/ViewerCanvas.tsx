@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import * as THREE from 'three'
+import * as OBC from '@thatopen/components'
 import { useFragmentsEngine } from '@/hooks/useFragmentsEngine'
 import { useModelLoader } from '@/hooks/useModelLoader'
 import { useModelStore } from '@/store/useModelStore'
@@ -13,16 +14,23 @@ import type { FragmentsEngine } from '@/lib/fragmentsEngine'
 interface ViewerCanvasProps {
   onEngineReady?: (engineRef: React.MutableRefObject<FragmentsEngine | null>) => void
   adminMode?: boolean
+  isFinProject?: boolean
 }
 
-export function ViewerCanvas({ onEngineReady, adminMode = true }: ViewerCanvasProps) {
+export function ViewerCanvas({ onEngineReady, adminMode = true, isFinProject = false }: ViewerCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const statsRef = useRef<any>(null)
   const statsContainerRef = useRef<HTMLDivElement>(null)
   const [statsVisible, setStatsVisible] = useState(false)
   const [pickerActive, setPickerActive] = useState(false)
-  const [dashboardVisible, setDashboardVisible] = useState(false)
+  const [dashboardVisible, setDashboardVisible] = useState(isFinProject)
   const [pickedCoord, setPickedCoord] = useState<[number, number, number] | null>(null)
+
+  useEffect(() => {
+    if (isFinProject) {
+      setDashboardVisible(true)
+    }
+  }, [isFinProject])
 
   const { engineRef, isReady, error } = useFragmentsEngine(containerRef)
   const { loadModel, isLoading } = useModelLoader(engineRef)
@@ -37,6 +45,7 @@ export function ViewerCanvas({ onEngineReady, adminMode = true }: ViewerCanvasPr
   const bloomThreshold = useAppStore(s => s.bloomThreshold)
   const fogDensity = useAppStore(s => s.fogDensity)
   const cloudDensity = useAppStore(s => s.cloudDensity)
+  const cloudShadowsEnabled = useAppStore(s => s.cloudShadowsEnabled)
   const cloudSpeed = useAppStore(s => s.cloudSpeed)
   const dofEnabled = useAppStore(s => s.dofEnabled)
   const dofFocus = useAppStore(s => s.dofFocus)
@@ -53,9 +62,9 @@ export function ViewerCanvas({ onEngineReady, adminMode = true }: ViewerCanvasPr
 
   useEffect(() => {
     if (isReady && engineRef.current) {
-      engineRef.current.setLightingParams({ realisticMode, exposure, lightIntensity, ambientIntensity, timeOfDay, bloomStrength, bloomThreshold, fogDensity, cloudDensity, cloudSpeed, dofEnabled, dofFocus, dofAperture, dofMaxBlur, visualSaturation, visualTemperature, visualContrast, visualVignette })
+      engineRef.current.setLightingParams({ realisticMode, exposure, lightIntensity, ambientIntensity, timeOfDay, bloomStrength, bloomThreshold, fogDensity, cloudDensity, cloudShadowsEnabled, cloudSpeed, dofEnabled, dofFocus, dofAperture, dofMaxBlur, visualSaturation, visualTemperature, visualContrast, visualVignette })
     }
-  }, [realisticMode, exposure, lightIntensity, ambientIntensity, timeOfDay, bloomStrength, bloomThreshold, fogDensity, cloudDensity, cloudSpeed, dofEnabled, dofFocus, dofAperture, dofMaxBlur, visualSaturation, visualTemperature, visualContrast, visualVignette, isReady])
+  }, [realisticMode, exposure, lightIntensity, ambientIntensity, timeOfDay, bloomStrength, bloomThreshold, fogDensity, cloudDensity, cloudShadowsEnabled, cloudSpeed, dofEnabled, dofFocus, dofAperture, dofMaxBlur, visualSaturation, visualTemperature, visualContrast, visualVignette, isReady])
 
   const loadedIdsRef = useRef<Set<string>>(new Set())
 
@@ -72,7 +81,7 @@ export function ViewerCanvas({ onEngineReady, adminMode = true }: ViewerCanvasPr
           position: model.position,
           rotation: model.rotation,
           scale: model.scale,
-        }, adminMode) // only auto-fit camera if we are in admin mode (studio)
+        }, adminMode) 
       }
     })
   }, [models, isReady])
@@ -114,7 +123,7 @@ export function ViewerCanvas({ onEngineReady, adminMode = true }: ViewerCanvasPr
     }
   }, [statsVisible])
 
-  const handleCanvasClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+  const handleCanvasClick = useCallback(async (e: React.MouseEvent<HTMLDivElement>) => {
     if (!pickerActive) return
     const engine = engineRef.current
     if (!engine) return
@@ -125,15 +134,40 @@ export function ViewerCanvas({ onEngineReady, adminMode = true }: ViewerCanvasPr
     const x = ((e.clientX - rect.left) / rect.width) * 2 - 1
     const y = -((e.clientY - rect.top) / rect.height) * 2 + 1
 
-    const raycaster = new THREE.Raycaster()
-    raycaster.setFromCamera(new THREE.Vector2(x, y), engine.world.camera.three)
-
     const meshes: THREE.Object3D[] = []
+    
+    // Collect standard meshes (like GLB models) that have position attributes
     engine.world.scene.three.traverse((obj: THREE.Object3D) => {
-      if ((obj as THREE.Mesh).isMesh) meshes.push(obj)
+      const mesh = obj as THREE.Mesh
+      if (mesh.isMesh && mesh.visible) {
+        if (mesh.scale.x > 100000) return;
+        const material = mesh.material as THREE.Material;
+        if (material && material.side === THREE.BackSide) return;
+        
+        // Only add standard meshes if they have a position attribute
+        // Fragment meshes are handled separately if they lack this standard structure
+        if (mesh.geometry?.attributes?.position) {
+          meshes.push(obj)
+        } else if ((mesh as any).isInstancedMesh || (mesh as any).isBatchedMesh || mesh.name.includes("Fragment")) {
+          meshes.push(obj)
+        }
+      }
     })
 
-    const hits = raycaster.intersectObjects(meshes, false)
+    const raycaster = new THREE.Raycaster()
+    raycaster.setFromCamera(new THREE.Vector2(x, y), engine.world.camera.three)
+    
+    let hits: THREE.Intersection[] = []
+    
+    for (const mesh of meshes) {
+      try {
+        const rawHits = raycaster.intersectObject(mesh, false)
+        hits.push(...rawHits)
+      } catch (err) {
+      }
+    }
+    
+    hits.sort((a, b) => a.distance - b.distance)
     if (hits.length > 0) {
       const p = hits[0].point
       setPickedCoord([
@@ -162,7 +196,7 @@ export function ViewerCanvas({ onEngineReady, adminMode = true }: ViewerCanvasPr
       )}
 
       {/* Toolbar */}
-      {step === 'viewing' && (
+      {step === 'viewing' && adminMode && (
         <ViewerToolbar
           engineRef={engineRef}
           onToggleStats={() => setStatsVisible(v => !v)}
@@ -174,7 +208,7 @@ export function ViewerCanvas({ onEngineReady, adminMode = true }: ViewerCanvasPr
         />
       )}
 
-      {/* Right side panels — admin only */}
+      {/* Right side panels */}
       {step === 'viewing' && adminMode && (
         <div className="right-panels-container">
           <RenderPanel />

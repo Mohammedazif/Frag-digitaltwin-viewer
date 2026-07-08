@@ -85,10 +85,16 @@ export const CloudShader = {
         
         // Lighting from the sun
         vec3 sunDir = normalize(sunPosition);
+        
+        // Day/night transition based on sun elevation
+        float dayLight = smoothstep(-0.1, 0.1, sunDir.y);
+        vec3 nightColor = vec3(0.05, 0.06, 0.08); // Dark, moonlit night clouds
+        vec3 baseColor = mix(nightColor, cloudColor, dayLight);
+        
         float sunDot = max(dot(dir, sunDir), 0.0);
         
-        // Silver lining effect around the sun
-        vec3 finalColor = mix(cloudColor, vec3(1.0, 1.0, 0.95), pow(sunDot, 8.0) * 0.8);
+        // Silver lining effect around the sun (only active during the day)
+        vec3 finalColor = mix(baseColor, vec3(1.0, 1.0, 0.95), pow(sunDot, 8.0) * 0.8 * dayLight);
         
         // Soften horizon
         float horizonFade = smoothstep(0.0, 0.15, dir.y);

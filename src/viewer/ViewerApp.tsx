@@ -3,6 +3,7 @@ import { ViewerCanvas } from '@/components/viewer/ViewerCanvas'
 import { useAppStore } from '@/store/useAppStore'
 import { useModelStore } from '@/store/useModelStore'
 import { loadProjectFromHandle, loadModelsFromProject } from '@/lib/projectDb'
+import { useProjectStore } from '@/store/useProjectStore'
 import type { FragmentsEngine } from '@/lib/fragmentsEngine'
 import type { LoadedModel, ProjectMeta } from '@/types'
 
@@ -60,6 +61,7 @@ export default function ViewerApp() {
       }
 
       setProjectMeta(meta)
+      useProjectStore.setState({ currentProject: meta })
       applyRenderSettings(meta)
 
       const projectModels = await loadModelsFromProject(handle, meta)
@@ -125,7 +127,35 @@ export default function ViewerApp() {
         const meta = (await res.json()) as ProjectMeta
         if (!mounted) return
 
+        if (meta.isFinProject && meta.apiSettings) {
+          const s = meta.apiSettings
+          ;(window as any).INJECTED_PROJECT_CONFIG = {
+            fin: {
+              baseUrl: s.finBaseUrl || 'https://localhost',
+              project: s.finProjectName || '',
+              interval: s.finInterval || 5000,
+              directMode: s.finDirectMode || false,
+              livePoints: s.finLivePoints || undefined,
+              endpoints: s.finEndpoints || undefined,
+            },
+            weather: {
+              lat: s.weatherLat ?? 24.469,
+              lon: s.weatherLon ?? 54.358,
+              apiKey: s.weatherApiKey || '88214bff7aa566e9f6ff1ba5db38f65f',
+            },
+            navButtons: s.navButtons || undefined,
+            leftCards: s.leftCards || undefined,
+            rightCards: s.rightCards || undefined,
+            sideButtons: s.sideButtons ? s.sideButtons.filter((b: any) => b.enabled !== false) : undefined,
+            subPanels: s.subPanels || undefined,
+            modelsConfig: s.modelsConfig || undefined,
+            floorsConfig: s.floorsConfig || undefined,
+          }
+          console.log('[ViewerApp] Injected FIN project config for standalone viewer')
+        }
+
         setProjectMeta(meta)
+        useProjectStore.setState({ currentProject: meta })
         applyRenderSettings(meta)
 
         // Load each model via HTTP (FastAPI serves /models/{filename})
@@ -176,41 +206,11 @@ export default function ViewerApp() {
 
   return (
     <div className="app-layout">
-      {/* Header */}
-      <header className="header">
-        <div className="header-brand">
-          <svg className="header-logo" viewBox="0 0 32 32" fill="none">
-            <rect x="4" y="16" width="10" height="12" fill="#186d4e" opacity="0.9"/>
-            <rect x="16" y="10" width="10" height="18" fill="#186d4e" opacity="0.6"/>
-            <rect x="10" y="6" width="6" height="10" fill="#186d4e" opacity="0.4"/>
-            <polygon points="4,16 9,8 14,16" fill="#0e4937" opacity="0.8"/>
-          </svg>
-          <div>
-            <h1 className="header-title">
-              {projectMeta ? projectMeta.name : 'EKO Digital Twin Viewer'}
-            </h1>
-            <p className="header-subtitle">
-              {projectMeta
-                ? `${projectMeta.models.length} model${projectMeta.models.length !== 1 ? 's' : ''}`
-                : 'View · Explore'}
-            </p>
-          </div>
-        </div>
-
-        <div className="header-actions">
-          {hasModels && (
-            <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-              {models.length} loaded
-            </span>
-          )}
-        </div>
-      </header>
-
-      {/* Body — no sidebar, no edit panels */}
+      {/* Body — no header, no sidebar, full screen */}
       <div className="app-body">
         <main className="app-main">
           {/* adminMode=false hides RenderPanel + ModelPositionPanel */}
-          <ViewerCanvas onEngineReady={handleEngineReady} adminMode={false} />
+          <ViewerCanvas onEngineReady={handleEngineReady} adminMode={false} isFinProject={projectMeta?.isFinProject} />
 
           {/* Open Project overlay — shown only when auto-load fails */}
           {!hasModels && !isLoading && (

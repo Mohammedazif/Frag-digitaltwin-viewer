@@ -11,14 +11,12 @@ function viewerAssetsPlugin() {
     configureServer(server: any) {
       server.middlewares.use('/viewer-assets.json', (_req: any, res: any) => {
         const distPath = path.resolve(__dirname, 'dist')
-        if (!fs.existsSync(distPath)) {
-          res.statusCode = 404
-          res.end(JSON.stringify({ error: 'Not built' }))
-          return
-        }
+        const templatesPath = path.resolve(__dirname, 'templates')
+        const staticPath = path.resolve(__dirname, 'static')
         
         const files: { path: string, content: string }[] = []
         function walk(dir: string, base: string) {
+          if (!fs.existsSync(dir)) return
           for (const item of fs.readdirSync(dir)) {
             const itemPath = path.join(dir, item)
             if (fs.statSync(itemPath).isDirectory()) {
@@ -30,18 +28,30 @@ function viewerAssetsPlugin() {
             }
           }
         }
-        walk(distPath, '')
+        if (fs.existsSync(distPath)) {
+          walk(distPath, '')
+        }
+        if (fs.existsSync(templatesPath)) {
+          walk(templatesPath, 'templates')
+        }
+        if (fs.existsSync(staticPath)) {
+          walk(staticPath, 'static')
+        }
+        
         res.setHeader('Content-Type', 'application/json')
         res.end(JSON.stringify(files))
       })
     },
     closeBundle() {
       const distPath = path.resolve(__dirname, 'dist')
+      const templatesPath = path.resolve(__dirname, 'templates')
+      const staticPath = path.resolve(__dirname, 'static')
       if (!fs.existsSync(distPath)) return
       const outPath = path.join(distPath, 'viewer-assets.json')
       
       const files: { path: string, content: string }[] = []
       function walk(dir: string, base: string) {
+        if (!fs.existsSync(dir)) return
         for (const item of fs.readdirSync(dir)) {
           const itemPath = path.join(dir, item)
           if (fs.statSync(itemPath).isDirectory()) {
@@ -54,6 +64,8 @@ function viewerAssetsPlugin() {
         }
       }
       walk(distPath, '')
+      walk(templatesPath, 'templates')
+      walk(staticPath, 'static')
       fs.writeFileSync(outPath, JSON.stringify(files))
     }
   }
@@ -81,8 +93,63 @@ function backendFilesPlugin() {
   }
 }
 
+function templatesPlugin() {
+  const templatesPath = path.resolve(__dirname, 'templates')
+  return {
+    name: 'templates-plugin',
+    configureServer(server: any) {
+      server.middlewares.use('/templates', (req: any, res: any, next: any) => {
+        const rawUrl: string = req.url || ''
+        const urlPath = rawUrl.split('?')[0]
+        
+        if (urlPath === '' || urlPath === '/') {
+          res.writeHead(301, { Location: '/templates/index.html' })
+          res.end()
+          return
+        }
+        
+        const filePath = path.join(templatesPath, urlPath)
+        if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+          const content = fs.readFileSync(filePath, 'utf-8')
+          if (filePath.endsWith('.html')) res.setHeader('Content-Type', 'text/html; charset=utf-8')
+          else if (filePath.endsWith('.css')) res.setHeader('Content-Type', 'text/css; charset=utf-8')
+          else if (filePath.endsWith('.js')) res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
+          res.end(content)
+        } else {
+          next()
+        }
+      })
+    }
+  }
+}
+
+function staticFolderPlugin() {
+  const staticPath = path.resolve(__dirname, 'static')
+  return {
+    name: 'static-folder-plugin',
+    configureServer(server: any) {
+      server.middlewares.use('/static', (req: any, res: any, next: any) => {
+        const rawUrl: string = req.url || ''
+        const urlPath = rawUrl.split('?')[0]
+        
+        const filePath = path.join(staticPath, urlPath)
+        if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+          const content = fs.readFileSync(filePath, 'utf-8')
+          if (filePath.endsWith('.html')) res.setHeader('Content-Type', 'text/html; charset=utf-8')
+          else if (filePath.endsWith('.css')) res.setHeader('Content-Type', 'text/css; charset=utf-8')
+          else if (filePath.endsWith('.js')) res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
+          res.end(content)
+        } else {
+          next()
+        }
+      })
+    }
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), wasm(), topLevelAwait(), viewerAssetsPlugin(), backendFilesPlugin()],
+  base: './',
+  plugins: [react(), wasm(), topLevelAwait(), viewerAssetsPlugin(), backendFilesPlugin(), templatesPlugin(), staticFolderPlugin()],
   server: {
     proxy: {
       '/api/fin': {
