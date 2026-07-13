@@ -43,6 +43,7 @@ export function ViewerCanvas({ onEngineReady, adminMode = true, isFinProject = f
   const timeOfDay = useAppStore(s => s.timeOfDay)
   const bloomStrength = useAppStore(s => s.bloomStrength)
   const bloomThreshold = useAppStore(s => s.bloomThreshold)
+  const bloomEnabled = useAppStore(s => s.bloomEnabled)
   const fogDensity = useAppStore(s => s.fogDensity)
   const cloudDensity = useAppStore(s => s.cloudDensity)
   const cloudShadowsEnabled = useAppStore(s => s.cloudShadowsEnabled)
@@ -55,6 +56,10 @@ export function ViewerCanvas({ onEngineReady, adminMode = true, isFinProject = f
   const visualTemperature = useAppStore(s => s.visualTemperature)
   const visualContrast = useAppStore(s => s.visualContrast)
   const visualVignette = useAppStore(s => s.visualVignette)
+  const godRaysEnabled = useAppStore(s => s.godRaysEnabled)
+  const godRayStrength = useAppStore(s => s.godRayStrength)
+  const chromaticAberration = useAppStore(s => s.chromaticAberration)
+  const autoFocus = useAppStore(s => s.autoFocus)
 
   useEffect(() => {
     if (isReady && onEngineReady) onEngineReady(engineRef)
@@ -62,9 +67,9 @@ export function ViewerCanvas({ onEngineReady, adminMode = true, isFinProject = f
 
   useEffect(() => {
     if (isReady && engineRef.current) {
-      engineRef.current.setLightingParams({ realisticMode, exposure, lightIntensity, ambientIntensity, timeOfDay, bloomStrength, bloomThreshold, fogDensity, cloudDensity, cloudShadowsEnabled, cloudSpeed, dofEnabled, dofFocus, dofAperture, dofMaxBlur, visualSaturation, visualTemperature, visualContrast, visualVignette })
+      engineRef.current.setLightingParams({ realisticMode, exposure, lightIntensity, ambientIntensity, timeOfDay, bloomStrength, bloomThreshold, bloomEnabled, fogDensity, cloudDensity, cloudShadowsEnabled, cloudSpeed, dofEnabled, dofFocus, dofAperture, dofMaxBlur, visualSaturation, visualTemperature, visualContrast, visualVignette, godRaysEnabled, godRayStrength, chromaticAberration, autoFocus })
     }
-  }, [realisticMode, exposure, lightIntensity, ambientIntensity, timeOfDay, bloomStrength, bloomThreshold, fogDensity, cloudDensity, cloudShadowsEnabled, cloudSpeed, dofEnabled, dofFocus, dofAperture, dofMaxBlur, visualSaturation, visualTemperature, visualContrast, visualVignette, isReady])
+  }, [realisticMode, exposure, lightIntensity, ambientIntensity, timeOfDay, bloomStrength, bloomThreshold, bloomEnabled, fogDensity, cloudDensity, cloudShadowsEnabled, cloudSpeed, dofEnabled, dofFocus, dofAperture, dofMaxBlur, visualSaturation, visualTemperature, visualContrast, visualVignette, godRaysEnabled, godRayStrength, chromaticAberration, autoFocus, isReady])
 
   const loadedIdsRef = useRef<Set<string>>(new Set())
 

@@ -16,6 +16,7 @@ import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass.js'
 import { SSRPass } from 'three/examples/jsm/postprocessing/SSRPass.js'
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js'
 import { ColorGradeShader } from './ColorGradeShader'
+import { GodRayShader } from './GodRayShader'
 import * as SunCalc from 'suncalc'
 
 export interface FragmentsEngine {
@@ -23,7 +24,7 @@ export interface FragmentsEngine {
   world: any
   components: OBC.Components
   dispose: () => Promise<void>
-  setLightingParams: (params: { realisticMode: boolean, exposure: number, lightIntensity: number, ambientIntensity: number, timeOfDay: number, bloomStrength: number, bloomThreshold: number, fogDensity: number, cloudDensity: number, cloudShadowsEnabled?: boolean, cloudSpeed: number, dofEnabled: boolean, dofFocus: number, dofAperture: number, dofMaxBlur: number, visualSaturation?: number, visualTemperature?: number, visualContrast?: number, visualVignette?: number }) => void
+  setLightingParams: (params: { realisticMode: boolean, exposure: number, lightIntensity: number, ambientIntensity: number, timeOfDay: number, bloomStrength: number, bloomThreshold: number, bloomEnabled?: boolean, fogDensity: number, cloudDensity: number, cloudShadowsEnabled?: boolean, cloudSpeed: number, dofEnabled: boolean, dofFocus: number, dofAperture: number, dofMaxBlur: number, visualSaturation?: number, visualTemperature?: number, visualContrast?: number, visualVignette?: number, godRaysEnabled?: boolean, godRayStrength?: number, chromaticAberration?: number, autoFocus?: boolean }) => void
 }
 
 export async function initFragmentsEngine(
@@ -53,8 +54,7 @@ export async function initFragmentsEngine(
 
   // Load Photorealistic HDRI
   const rgbeLoader = new RGBELoader()
-  rgbeLoader.setCrossOrigin('anonymous')
-  rgbeLoader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/equirectangular/venice_sunset_1k.hdr', (texture) => {
+  rgbeLoader.load('/hdri/venice_sunset_1k.hdr', (texture) => {
     texture.mapping = THREE.EquirectangularReflectionMapping
     const hdriTexture = pmremGenerator.fromEquirectangular(texture).texture
     envTexture = hdriTexture
@@ -121,8 +121,11 @@ export async function initFragmentsEngine(
   let ssrPass: any
   let colorGradePass: any
   let cloudShadowPass: any
+  let godRayPass: any
+  let godRayDepthRT: THREE.WebGLRenderTarget
+  let autoFocusEnabled = false
 
-  const setLightingParams = (params: { realisticMode: boolean, exposure: number, lightIntensity: number, ambientIntensity: number, timeOfDay: number, bloomStrength: number, bloomThreshold: number, fogDensity: number, cloudDensity: number, cloudShadowsEnabled?: boolean, cloudSpeed: number, dofEnabled: boolean, dofFocus: number, dofAperture: number, dofMaxBlur: number, visualSaturation?: number, visualTemperature?: number, visualContrast?: number, visualVignette?: number }) => {
+  const setLightingParams = (params: { realisticMode: boolean, exposure: number, lightIntensity: number, ambientIntensity: number, timeOfDay: number, bloomStrength: number, bloomThreshold: number, bloomEnabled?: boolean, fogDensity: number, cloudDensity: number, cloudShadowsEnabled?: boolean, cloudSpeed: number, dofEnabled: boolean, dofFocus: number, dofAperture: number, dofMaxBlur: number, visualSaturation?: number, visualTemperature?: number, visualContrast?: number, visualVignette?: number, godRaysEnabled?: boolean, godRayStrength?: number, chromaticAberration?: number, autoFocus?: boolean }) => {
     isRealistic = params.realisticMode
     cloudMat.uniforms.cloudDensity.value = params.cloudDensity
     currentCloudSpeed = params.cloudSpeed
@@ -135,9 +138,13 @@ export async function initFragmentsEngine(
     
     if (bokehPass) {
       bokehPass.enabled = params.dofEnabled
-      if (params.dofFocus !== undefined) bokehPass.uniforms['focus'].value = params.dofFocus
+      if (!autoFocusEnabled && params.dofFocus !== undefined) bokehPass.uniforms['focus'].value = params.dofFocus
       if (params.dofAperture !== undefined) bokehPass.uniforms['aperture'].value = params.dofAperture
       if (params.dofMaxBlur !== undefined) bokehPass.uniforms['maxblur'].value = params.dofMaxBlur
+    }
+    
+    if (params.autoFocus !== undefined) {
+      autoFocusEnabled = params.autoFocus
     }
     
     if (ssaoPass) {
@@ -148,12 +155,18 @@ export async function initFragmentsEngine(
       ssrPass.enabled = false // Disabled for now as it turns all ground into a mirror without selective meshes
     }
     
+    if (godRayPass) {
+      godRayPass.enabled = params.realisticMode && params.godRaysEnabled === true
+      if (params.godRayStrength !== undefined) godRayPass.uniforms.godRayStrength.value = params.godRayStrength
+    }
+    
     if (colorGradePass) {
       colorGradePass.enabled = params.realisticMode
       if (params.visualSaturation !== undefined) colorGradePass.uniforms.saturation.value = params.visualSaturation
       if (params.visualTemperature !== undefined) colorGradePass.uniforms.temperature.value = params.visualTemperature
       if (params.visualContrast !== undefined) colorGradePass.uniforms.contrast.value = params.visualContrast
       if (params.visualVignette !== undefined) colorGradePass.uniforms.vignette.value = params.visualVignette
+      if (params.chromaticAberration !== undefined) colorGradePass.uniforms.chromaticAberration.value = params.chromaticAberration
     }
 
     if (params.realisticMode) {
@@ -233,6 +246,7 @@ export async function initFragmentsEngine(
       world.scene.three.fog = new THREE.FogExp2(0x88aacc, params.fogDensity)
 
       if (bloomPass) {
+        bloomPass.enabled = params.bloomEnabled !== false
         bloomPass.strength = params.bloomStrength
         bloomPass.threshold = params.bloomThreshold
       }
@@ -257,6 +271,9 @@ export async function initFragmentsEngine(
       world.renderer.three.toneMappingExposure = 1.0
       world.scene.three.environment = null
       world.scene.three.fog = null
+      
+      if (bloomPass) bloomPass.enabled = false
+      if (godRayPass) godRayPass.enabled = false
       
       realisticGroup.visible = false
 
@@ -308,6 +325,16 @@ export async function initFragmentsEngine(
   const renderPass = new RenderPass(world.scene.three, world.camera.three)
   composer.addPass(renderPass)
 
+  // Bloom Pass — now properly instantiated (was declared but never created)
+  bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    0.15,  // strength  (controlled by slider)
+    0.4,   // radius    (spread of the glow)
+    1.5    // threshold (only pixels brighter than this bloom — keeps sky/walls clean)
+  )
+  bloomPass.enabled = false
+  composer.addPass(bloomPass)
+
   // Cloud Shadow Post-Processing Pass
   cloudShadowPass = new ShaderPass(CloudShadowShader)
   cloudShadowPass.enabled = false
@@ -334,6 +361,27 @@ export async function initFragmentsEngine(
   ssrPass.opacity = 0.8
   ssrPass.thickness = 100
   composer.addPass(ssrPass)
+
+  // God Rays — Volumetric Light Scattering (depth-occlusion from sun position)
+  godRayPass = new ShaderPass(GodRayShader)
+  godRayPass.enabled = false
+  //
+  // IMPORTANT: Do NOT use composer.renderTarget1/2.depthTexture here.
+  // EffectComposer alternates renderTarget1 ⇔ renderTarget2 as write buffer each pass.
+  // If godRayPass samples renderTargetX.depthTexture while that target IS the active
+  // framebuffer (write buffer), WebGL throws:
+  //   GL_INVALID_OPERATION: Feedback loop formed between Framebuffer and active Texture
+  // Solution: use a completely SEPARATE render target that EffectComposer never writes to.
+  //
+  const godRayW = Math.ceil(window.innerWidth  * 0.5)  // half-res → fast depth pre-pass
+  const godRayH = Math.ceil(window.innerHeight * 0.5)
+  godRayDepthRT = new THREE.WebGLRenderTarget(godRayW, godRayH)
+  godRayDepthRT.depthBuffer = true
+  godRayDepthRT.depthTexture = new THREE.DepthTexture(godRayW, godRayH)
+  godRayDepthRT.depthTexture.format = THREE.DepthFormat
+  godRayDepthRT.depthTexture.type = THREE.UnsignedShortType
+  godRayPass.uniforms.tDepth.value = godRayDepthRT.depthTexture  // safe — never a framebuffer
+  composer.addPass(godRayPass)
 
   colorGradePass = new ShaderPass(ColorGradeShader)
   colorGradePass.enabled = false
@@ -374,6 +422,31 @@ export async function initFragmentsEngine(
         cloudShadowPass.uniforms.viewMatrixInverse.value.copy(world.camera.three.matrixWorld)
       }
       
+      // Update sun screen-space position for god rays every frame
+      // (tDepth is permanently bound to godRayDepthRT, updated via the pre-pass below)
+      if (godRayPass && godRayPass.enabled && rDir.userData.sunOffset) {
+        const sunWorld = new THREE.Vector3().copy(rDir.userData.sunOffset).normalize().multiplyScalar(1000)
+        const sunClip  = sunWorld.clone().project(world.camera.three)
+        godRayPass.uniforms.sunPositionScreen.value.set(
+          (sunClip.x + 1) * 0.5,
+          (sunClip.y + 1) * 0.5
+        )
+        const sunDir = new THREE.Vector3().copy(rDir.userData.sunOffset).normalize()
+        godRayPass.uniforms.sunElevation.value = sunDir.y
+      }
+      
+      // Auto-focus: drive BokehPass focus toward orbit controls target distance
+      if (autoFocusEnabled && bokehPass && bokehPass.enabled && world.camera.controls) {
+        const focusTarget = new THREE.Vector3()
+        world.camera.controls.getTarget(focusTarget)
+        const dist = world.camera.three.position.distanceTo(focusTarget)
+        bokehPass.uniforms['focus'].value = THREE.MathUtils.lerp(
+          bokehPass.uniforms['focus'].value as number,
+          dist,
+          Math.min(delta * 3.0, 1.0)
+        )
+      }
+      
       if (rDir.userData.sunOffset && world.camera.controls) {
         const target = new THREE.Vector3()
         world.camera.controls.getTarget(target)
@@ -382,6 +455,19 @@ export async function initFragmentsEngine(
         rDir.shadow.camera.updateProjectionMatrix()
       }
       
+      // God ray depth pre-pass — render to DEDICATED half-res render target.
+      // Uses MeshDepthMaterial (no lighting/PBR → very fast). Sky sphere is
+      // beyond far plane (radius 500k > far 200k) → clipped → sky pixels keep
+      // clear depth = 1.0, which is what the shader uses to detect sky.
+      if (godRayPass && godRayPass.enabled) {
+        world.scene.three.overrideMaterial = new THREE.MeshDepthMaterial()
+        world.renderer.three.setRenderTarget(godRayDepthRT)
+        world.renderer.three.clear()
+        world.renderer.three.render(world.scene.three, world.camera.three)
+        world.renderer.three.setRenderTarget(null)
+        world.scene.three.overrideMaterial = null
+      }
+
       world.renderer.needsUpdate = false
       world.renderer.onBeforeUpdate.trigger(world.renderer)
       composer.render()
@@ -398,9 +484,9 @@ export async function initFragmentsEngine(
     }
     composer.setSize(size.x, size.y)
     smaaPass.setSize(size.x * window.devicePixelRatio, size.y * window.devicePixelRatio)
-    if (ssaoPass) {
-      ssaoPass.setSize(size.x, size.y)
-    }
+    if (ssaoPass) ssaoPass.setSize(size.x, size.y)
+    if (bloomPass) bloomPass.setSize(size.x, size.y)
+    if (godRayDepthRT) godRayDepthRT.setSize(Math.ceil(size.x * 0.5), Math.ceil(size.y * 0.5))
   })
 
   components.init()

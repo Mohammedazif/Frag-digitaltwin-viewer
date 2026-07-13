@@ -13,6 +13,7 @@ interface AppState {
   timeOfDay: number
   bloomStrength: number
   bloomThreshold: number
+  bloomEnabled: boolean
   fogDensity: number
   cloudDensity: number
   cloudShadowsEnabled: boolean
@@ -25,12 +26,16 @@ interface AppState {
   visualTemperature: number
   visualContrast: number
   visualVignette: number
+  godRaysEnabled: boolean
+  godRayStrength: number
+  chromaticAberration: number
+  autoFocus: boolean
 
   setStep: (step: AppStep) => void
   setProgress: (progress: number, label?: string) => void
   setError: (error: string) => void
   setRealisticMode: (enabled: boolean) => void
-  setLightingParams: (params: Partial<{ exposure: number, lightIntensity: number, ambientIntensity: number, timeOfDay: number, bloomStrength: number, bloomThreshold: number, fogDensity: number, cloudDensity: number, cloudShadowsEnabled: boolean, cloudSpeed: number, dofEnabled: boolean, dofFocus: number, dofAperture: number, dofMaxBlur: number, visualSaturation: number, visualTemperature: number, visualContrast: number, visualVignette: number }>) => void
+  setLightingParams: (params: Partial<{ exposure: number, lightIntensity: number, ambientIntensity: number, timeOfDay: number, bloomStrength: number, bloomThreshold: number, bloomEnabled: boolean, fogDensity: number, cloudDensity: number, cloudShadowsEnabled: boolean, cloudSpeed: number, dofEnabled: boolean, dofFocus: number, dofAperture: number, dofMaxBlur: number, visualSaturation: number, visualTemperature: number, visualContrast: number, visualVignette: number, godRaysEnabled: boolean, godRayStrength: number, chromaticAberration: number, autoFocus: boolean }>) => void
   reset: () => void
 }
 
@@ -46,6 +51,7 @@ export const useAppStore = create<AppState>((set) => ({
   timeOfDay: 14.5,
   bloomStrength: 0.15,
   bloomThreshold: 1.5,
+  bloomEnabled: true,
   fogDensity: 0.00015,
   cloudDensity: 0.5,
   cloudShadowsEnabled: true,
@@ -58,6 +64,10 @@ export const useAppStore = create<AppState>((set) => ({
   visualTemperature: 6500.0,
   visualContrast: 1.0,
   visualVignette: 0.4,
+  godRaysEnabled: false,
+  godRayStrength: 0.8,
+  chromaticAberration: 0.0,
+  autoFocus: false,
 
   setStep: (step) => set({ step, error: null }),
   setProgress: (progress, label = '') => set({ conversionProgress: progress, conversionStepLabel: label }),
