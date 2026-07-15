@@ -21,6 +21,7 @@ import * as SunCalc from 'suncalc'
 
 export interface FragmentsEngine {
   fragments: FRAGS.FragmentsModels
+  obcFragments: OBC.FragmentsManager
   world: any
   components: OBC.Components
   dispose: () => Promise<void>
@@ -69,6 +70,7 @@ export async function initFragmentsEngine(
   
   // Sky - scaled massively so the camera never leaves the box
   const sky = new Sky()
+  sky.name = 'SkyDome'
   sky.scale.setScalar(500000)
   
   const skyUniforms = sky.material.uniforms
@@ -109,6 +111,7 @@ export async function initFragmentsEngine(
   })
   
   const cloudsDome = new THREE.Mesh(cloudGeo, cloudMat)
+  cloudsDome.name = 'CloudsDome'
 
   realisticGroup.add(sky, rAmbient, rDir, cloudsDome)
   world.scene.three.add(realisticGroup)
@@ -499,6 +502,9 @@ export async function initFragmentsEngine(
   const workerUrl = await FRAGS.FragmentsModels.getWorker()
   const fragments = new FRAGS.FragmentsModels(workerUrl)
 
+  const obcFragments = components.get(OBC.FragmentsManager)
+  obcFragments.init(workerUrl)
+
   world.camera.controls.addEventListener('update', () => fragments.update())
 
   fragments.models.materials.list.onItemSet.add(({ value: material }: any) => {
@@ -526,5 +532,5 @@ export async function initFragmentsEngine(
     components.dispose()
   }
 
-  return { fragments, world, components, dispose, setLightingParams }
+  return { fragments, obcFragments, world, components, dispose, setLightingParams }
 }

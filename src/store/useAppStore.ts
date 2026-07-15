@@ -30,12 +30,16 @@ interface AppState {
   godRayStrength: number
   chromaticAberration: number
   autoFocus: boolean
+  materialPickerActive: boolean
+  selectedMaterialElement: { modelId: string, id: number, category?: string } | null
 
   setStep: (step: AppStep) => void
   setProgress: (progress: number, label?: string) => void
   setError: (error: string) => void
   setRealisticMode: (enabled: boolean) => void
   setLightingParams: (params: Partial<{ exposure: number, lightIntensity: number, ambientIntensity: number, timeOfDay: number, bloomStrength: number, bloomThreshold: number, bloomEnabled: boolean, fogDensity: number, cloudDensity: number, cloudShadowsEnabled: boolean, cloudSpeed: number, dofEnabled: boolean, dofFocus: number, dofAperture: number, dofMaxBlur: number, visualSaturation: number, visualTemperature: number, visualContrast: number, visualVignette: number, godRaysEnabled: boolean, godRayStrength: number, chromaticAberration: number, autoFocus: boolean }>) => void
+  setMaterialPickerActive: (active: boolean) => void
+  setSelectedMaterialElement: (element: { modelId: string, id: number, category?: string } | null) => void
   reset: () => void
 }
 
@@ -68,12 +72,16 @@ export const useAppStore = create<AppState>((set) => ({
   godRayStrength: 0.8,
   chromaticAberration: 0.0,
   autoFocus: false,
+  materialPickerActive: false,
+  selectedMaterialElement: null,
 
   setStep: (step) => set({ step, error: null }),
   setProgress: (progress, label = '') => set({ conversionProgress: progress, conversionStepLabel: label }),
   setError: (error) => set({ step: 'error', error }),
   setRealisticMode: (realisticMode) => set({ realisticMode }),
   setLightingParams: (params) => set((state) => ({ ...state, ...params })),
+  setMaterialPickerActive: (materialPickerActive) => set({ materialPickerActive, selectedMaterialElement: null }),
+  setSelectedMaterialElement: (selectedMaterialElement) => set({ selectedMaterialElement }),
   reset: () =>
     set({
       step: 'idle',

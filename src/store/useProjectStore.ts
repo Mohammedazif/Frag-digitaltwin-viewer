@@ -45,6 +45,8 @@ interface ProjectState {
   updateModelTransform: (modelId: string, transform: { position?: [number, number, number], rotation?: [number, number, number], scale?: [number, number, number] }) => Promise<void>
   updateThumbnail: (dataUrl: string) => Promise<void>
   saveViewAndSettings: (camera: import('@/types').ProjectCamera, renderSettings: import('@/types').ProjectRenderSettings) => Promise<void>
+  setMaterialOverride: (modelId: string, override: import('@/types').MaterialOverride) => Promise<void>
+  removeMaterialOverride: (modelId: string, overrideId: string) => Promise<void>
   setDirty: (dirty: boolean) => void
 }
 
@@ -278,6 +280,46 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       models: currentProject.models.map(m =>
         m.modelId === modelId ? { ...m, ...transform } : m
       ),
+      updatedAt: Date.now(),
+    }
+    await saveProjectMeta(folderHandle, updated)
+
+    const recent = get().recentProjects.map(r =>
+      r.meta.projectId === updated.projectId ? { ...r, meta: updated } : r
+    )
+    set({ currentProject: updated, isDirty: false, recentProjects: recent })
+  },
+
+  setMaterialOverride: async (modelId: string, override: import('@/types').MaterialOverride) => {
+    const { currentProject, folderHandle } = get()
+    if (!currentProject || !folderHandle) return
+
+    const materialOverrides = { ...(currentProject.materialOverrides || {}) }
+    materialOverrides[override.id] = override
+
+    const updated: ProjectMeta = {
+      ...currentProject,
+      materialOverrides,
+      updatedAt: Date.now(),
+    }
+    await saveProjectMeta(folderHandle, updated)
+
+    const recent = get().recentProjects.map(r =>
+      r.meta.projectId === updated.projectId ? { ...r, meta: updated } : r
+    )
+    set({ currentProject: updated, isDirty: false, recentProjects: recent })
+  },
+
+  removeMaterialOverride: async (modelId: string, overrideId: string) => {
+    const { currentProject, folderHandle } = get()
+    if (!currentProject || !folderHandle) return
+
+    const materialOverrides = { ...(currentProject.materialOverrides || {}) }
+    delete materialOverrides[overrideId]
+
+    const updated: ProjectMeta = {
+      ...currentProject,
+      materialOverrides,
       updatedAt: Date.now(),
     }
     await saveProjectMeta(folderHandle, updated)

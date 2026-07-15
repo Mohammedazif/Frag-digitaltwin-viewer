@@ -3,12 +3,14 @@ import * as THREE from 'three'
 import * as OBC from '@thatopen/components'
 import { useFragmentsEngine } from '@/hooks/useFragmentsEngine'
 import { useModelLoader } from '@/hooks/useModelLoader'
+import { useMaterialOverrides } from '@/hooks/useMaterialOverrides'
 import { useModelStore } from '@/store/useModelStore'
 import { useAppStore } from '@/store/useAppStore'
 import { ViewerToolbar } from './ViewerToolbar'
 import { ModelPositionPanel } from '@/components/viewer/ModelPositionPanel'
 import { RenderPanel } from '@/components/viewer/RenderPanel'
 import { DashboardOverlay } from '@/components/viewer/DashboardOverlay'
+import { MaterialPanel } from '@/components/viewer/MaterialPanel'
 import type { FragmentsEngine } from '@/lib/fragmentsEngine'
 
 interface ViewerCanvasProps {
@@ -25,6 +27,10 @@ export function ViewerCanvas({ onEngineReady, adminMode = true, isFinProject = f
   const [pickerActive, setPickerActive] = useState(false)
   const [dashboardVisible, setDashboardVisible] = useState(isFinProject)
   const [pickedCoord, setPickedCoord] = useState<[number, number, number] | null>(null)
+  const materialPickerActive = useAppStore(s => s.materialPickerActive)
+  const setMaterialPickerActive = useAppStore(s => s.setMaterialPickerActive)
+  const selectedMaterialElement = useAppStore(s => s.selectedMaterialElement)
+  const setSelectedMaterialElement = useAppStore(s => s.setSelectedMaterialElement)
 
   useEffect(() => {
     if (isFinProject) {
@@ -34,6 +40,10 @@ export function ViewerCanvas({ onEngineReady, adminMode = true, isFinProject = f
 
   const { engineRef, isReady, error } = useFragmentsEngine(containerRef)
   const { loadModel, isLoading } = useModelLoader(engineRef)
+  
+  // Initialize material overrides
+  useMaterialOverrides(engineRef)
+
   const models = useModelStore(s => s.models)
   const step = useAppStore(s => s.step)
   const realisticMode = useAppStore(s => s.realisticMode)
@@ -128,67 +138,291 @@ export function ViewerCanvas({ onEngineReady, adminMode = true, isFinProject = f
     }
   }, [statsVisible])
 
+  // Draw selection border (BoxHelper)
+  useEffect(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+
+    let boxHelper = engine.world.scene.three.getObjectByName('selection-border-helper') as THREE.Box3Helper;
+    if (!boxHelper) {
+      boxHelper = new THREE.Box3Helper(new THREE.Box3(), new THREE.Color(0xffff00));
+      boxHelper.name = 'selection-border-helper';
+      boxHelper.visible = false;
+      engine.world.scene.three.add(boxHelper);
+    }
+
+    if (materialPickerActive && selectedMaterialElement) {
+      const { modelId, id } = selectedMaterialElement;
+      const model = engine.fragments.models.list.get(modelId) as any;
+      
+      if (model) {
+        boxHelper.visible = false;
+        const getBox = async () => {
+          try {
+            // First try uniqube's getBoxes (Fragments v3)
+            if (typeof model.getBoxes === 'function') {
+              const boxes = await model.getBoxes([id]);
+              if (boxes && boxes.length > 0) {
+                const union = new THREE.Box3();
+                for (const b of boxes) {
+                  if (!b.isEmpty()) union.union(b);
+                }
+                if (!union.isEmpty()) {
+                  if (model.object && typeof model.object.updateMatrixWorld === 'function') {
+                    model.object.updateMatrixWorld(true);
+                    union.applyMatrix4(model.object.matrixWorld);
+                  }
+                  boxHelper.box.copy(union);
+                  boxHelper.box.expandByScalar(0.01);
+                  boxHelper.visible = true;
+                }
+              }
+            } else if (typeof model.getBoundingBox === 'function') {
+              const box = await model.getBoundingBox([id]);
+              if (box && !box.isEmpty()) {
+                if (model.object && typeof model.object.updateMatrixWorld === 'function') {
+                  model.object.updateMatrixWorld(true);
+                  box.applyMatrix4(model.object.matrixWorld);
+                }
+                boxHelper.box.copy(box);
+                boxHelper.box.expandByScalar(0.01);
+                boxHelper.visible = true;
+              }
+            }
+          } catch (e) {}
+        }
+        getBox();
+      } else {
+        // Fallback for GLB standard objects
+        const obj = engine.world.scene.three.children.find((c: any) => c.userData?.modelId === modelId);
+        if (obj) {
+          const box = new THREE.Box3().setFromObject(obj);
+          if (!box.isEmpty()) {
+            boxHelper.box.copy(box);
+            boxHelper.box.expandByScalar(0.01);
+            boxHelper.visible = true;
+          }
+        }
+      }
+    } else {
+      boxHelper.visible = false;
+    }
+  }, [selectedMaterialElement, materialPickerActive, engineRef]);
+
   const handleCanvasClick = useCallback(async (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!pickerActive) return
+    if (!pickerActive && !materialPickerActive) return
     const engine = engineRef.current
     if (!engine) return
     const container = containerRef.current
     if (!container) return
 
     const rect = container.getBoundingClientRect()
+    const canvas = container.querySelector('canvas')
+    if (canvas) {
+      const canvasRect = canvas.getBoundingClientRect()
+    }
+
     const x = ((e.clientX - rect.left) / rect.width) * 2 - 1
     const y = -((e.clientY - rect.top) / rect.height) * 2 + 1
+    const ndc = new THREE.Vector2(x, y)
+    // The library m.raycast function actually expects raw window coordinates and handles the container offset itself!
+    const rawPx = new THREE.Vector2(e.clientX, e.clientY)
 
-    const meshes: THREE.Object3D[] = []
-    
-    // Collect standard meshes (like GLB models) that have position attributes
-    engine.world.scene.three.traverse((obj: THREE.Object3D) => {
-      const mesh = obj as THREE.Mesh
-      if (mesh.isMesh && mesh.visible) {
-        if (mesh.scale.x > 100000) return;
-        const material = mesh.material as THREE.Material;
-        if (material && material.side === THREE.BackSide) return;
-        
-        // Only add standard meshes if they have a position attribute
-        // Fragment meshes are handled separately if they lack this standard structure
-        if (mesh.geometry?.attributes?.position) {
-          meshes.push(obj)
-        } else if ((mesh as any).isInstancedMesh || (mesh as any).isBatchedMesh || mesh.name.includes("Fragment")) {
-          meshes.push(obj)
+    let hitExpressId: string | null = null;
+    let hitModelId: string | null = null;
+    let hitPoint: THREE.Vector3 | null = null;
+    let fragHitDistance = Infinity;
+
+    try {
+      // 0. Try OBC.Raycasters natively with EXPLICIT position!
+      const casters = engine.components.get(OBC.Raycasters);
+      const caster = casters.get(engine.world);
+      if (caster) {
+        try {
+          const result = await caster.castRay({ position: ndc });
+          if (result && result.object) {
+            // we got a hit natively!
+            hitPoint = result.point;
+            let modelId = result.object.userData?.modelId;
+            let curr: any = result.object;
+            while (!modelId && curr.parent) {
+              curr = curr.parent;
+              modelId = curr.userData?.modelId;
+            }
+            if (!modelId) {
+              for (const [id, model] of engine.fragments.models.list.entries()) {
+                const m = model as any;
+                if (m === result.object || m.object === result.object || m === curr || m.object === curr) {
+                  modelId = id; break;
+                }
+              }
+            }
+            if (modelId) {
+              hitModelId = modelId;
+              hitExpressId = (result as any).localId?.toString() || result.instanceId?.toString() || (result as any).batchId?.toString() || '0';
+            }
+          } else {
+             // Let's try with window pixel position as a sanity check for native castRay
+             const pixelResult = await caster.castRay({ position: rawPx });
+          }
+        } catch (nativeErr) {
+          console.error('[ViewerCanvas] Native castRay threw:', nativeErr);
         }
       }
-    })
 
+      // 1. Native Fragment Raycast (Robust fallback logic)
+      if (canvas) {
+        for (const [modelId, m] of engine.fragments.models.list.entries()) {
+          try {
+            const mAny = m as any;
+            if (m.object) m.object.updateMatrixWorld(true);
+            if (typeof mAny.raycast === 'function') {
+              let hit = await mAny.raycast({
+                camera: engine.world.camera.three,
+                dom: canvas,
+                mouse: rawPx,
+              });
+              if (hit && typeof hit.localId === 'number') {
+                const dist = hit.distance ?? hit.rayDistance ?? 0;
+                if (dist < fragHitDistance) {
+                  fragHitDistance = dist;
+                  hitModelId = modelId;
+                  hitExpressId = hit.localId.toString();
+                  hitPoint = hit.point;
+                }
+              }
+            }
+          } catch (err) {}
+        }
+      }
+    } catch (err) {}
+
+    // 2. Fallback: standard THREE.Raycaster individually catching crashes
     const raycaster = new THREE.Raycaster()
-    raycaster.setFromCamera(new THREE.Vector2(x, y), engine.world.camera.three)
+    raycaster.setFromCamera(ndc, engine.world.camera.three)
     
-    let hits: THREE.Intersection[] = []
+    let allHits: THREE.Intersection[] = [];
+    const scene = engine.world.scene.three;
+    scene.updateMatrixWorld(true);
     
-    for (const mesh of meshes) {
-      try {
-        const rawHits = raycaster.intersectObject(mesh, false)
-        hits.push(...rawHits)
-      } catch (err) {
+    scene.traverse((child: any) => {
+      if (child.isMesh && child.visible && child.name !== 'SkyDome' && child.name !== 'CloudsDome') {
+        try {
+          const hits = raycaster.intersectObject(child, false);
+          allHits.push(...hits);
+        } catch (err) {
+          // Ignore crashing meshes
+        }
+      }
+    });
+    
+    allHits.sort((a, b) => a.distance - b.distance);
+    
+    // Only apply standard raycaster if native failed OR we want to force it
+    if (!hitModelId) {
+      let hits: THREE.Intersection[] = []
+      for (const h of allHits) {
+         const mesh = h.object as THREE.Mesh
+         if (mesh.visible) {
+             hits.push(h)
+         }
+      }
+      hits.sort((a, b) => a.distance - b.distance)
+
+      if (hits.length > 0) {
+         const hit = hits[0]
+         hitPoint = hit.point
+         const mesh = hit.object as THREE.Mesh & { getItemID?: (idx: number) => string };
+         console.log(`[ViewerCanvas] Standard hit mesh:`, mesh);
+         
+         let modelId = mesh.userData?.modelId;
+         let curr: any = mesh;
+         while (!modelId && curr.parent) {
+           curr = curr.parent;
+           modelId = curr.userData?.modelId;
+         }
+         
+         if (!modelId) {
+           for (const [id, model] of engine.fragments.models.list.entries()) {
+             const m = model as any;
+             if (m === mesh || m.object === mesh || m === curr || m.object === curr) {
+               modelId = id; break;
+             }
+             if (m.children?.includes(mesh) || m.items?.some((i: any) => i.mesh === mesh)) {
+               modelId = id; break;
+             }
+           }
+         }
+
+         if (modelId) {
+            hitModelId = modelId;
+            hitExpressId = hit.instanceId?.toString() || (hit as any).batchId?.toString() || (hit as any).localId?.toString() || '0';
+            if (typeof mesh.getItemID === 'function' && hit.instanceId !== undefined) {
+              hitExpressId = mesh.getItemID(hit.instanceId);
+            }
+            console.log(`[ViewerCanvas] Standard hit ACCEPTED. modelId: ${hitModelId}, expressId: ${hitExpressId}`);
+         }
       }
     }
-    
-    hits.sort((a, b) => a.distance - b.distance)
-    if (hits.length > 0) {
-      const p = hits[0].point
-      setPickedCoord([
-        parseFloat(p.x.toFixed(3)),
-        parseFloat(p.y.toFixed(3)),
-        parseFloat(p.z.toFixed(3)),
-      ])
+
+    if (hitModelId && hitExpressId) {
+      if (pickerActive && hitPoint) {
+         setPickedCoord([
+           parseFloat(hitPoint.x.toFixed(3)),
+           parseFloat(hitPoint.y.toFixed(3)),
+           parseFloat(hitPoint.z.toFixed(3)),
+         ])
+      } else if (materialPickerActive) {
+         const expressId = parseInt(hitExpressId, 10) || 0;
+         
+         // Start with fallback
+         let resolvedCategory = 'Object';
+         
+         const fragModel = engine.fragments.models.list.get(hitModelId) as any;
+         if (fragModel && typeof fragModel.getCategories === 'function' && typeof fragModel.getItemsByQuery === 'function') {
+           fragModel.getCategories().then(async (cats: string[]) => {
+             for (const cat of cats) {
+               try {
+                 const ids = await fragModel.getItemsByQuery({ categories: [new RegExp(cat, 'i')] });
+                 if (ids && ids.includes(expressId)) {
+                   resolvedCategory = cat;
+                   break;
+                 }
+               } catch (e) {
+                 // ignore
+               }
+             }
+             
+             setSelectedMaterialElement({
+               modelId: hitModelId,
+               id: expressId,
+               category: resolvedCategory
+             });
+           }).catch(() => {
+             // fallback
+             setSelectedMaterialElement({
+               modelId: hitModelId,
+               id: expressId,
+               category: resolvedCategory
+             });
+           });
+         } else {
+           setSelectedMaterialElement({
+             modelId: hitModelId,
+             id: expressId,
+             category: resolvedCategory
+           });
+         }
+      }
     }
-  }, [pickerActive])
+  }, [pickerActive, materialPickerActive])
 
   return (
     <div className="viewer-canvas-wrapper">
       {/* Three.js mount */}
       <div
         ref={containerRef}
-        className={`viewer-canvas-container${pickerActive ? ' picker-cursor' : ''}`}
+        className={`viewer-canvas-container${(pickerActive || materialPickerActive) ? ' picker-cursor' : ''}`}
         onClick={handleCanvasClick}
       />
 
@@ -207,9 +441,17 @@ export function ViewerCanvas({ onEngineReady, adminMode = true, isFinProject = f
           onToggleStats={() => setStatsVisible(v => !v)}
           statsVisible={statsVisible}
           pickerActive={pickerActive}
-          onTogglePicker={() => setPickerActive(v => !v)}
+          onTogglePicker={() => setPickerActive(v => {
+            if (!v) setMaterialPickerActive(false)
+            return !v
+          })}
           dashboardVisible={dashboardVisible}
           onToggleDashboard={() => setDashboardVisible(v => !v)}
+          materialPickerActive={materialPickerActive}
+          onToggleMaterialPicker={() => {
+            setMaterialPickerActive(!materialPickerActive)
+            if (!materialPickerActive) setPickerActive(false)
+          }}
         />
       )}
 
@@ -222,6 +464,7 @@ export function ViewerCanvas({ onEngineReady, adminMode = true, isFinProject = f
             pickedCoord={pickedCoord}
             onClearPickedCoord={() => setPickedCoord(null)}
           />
+          <MaterialPanel engineRef={engineRef} />
         </div>
       )}
 

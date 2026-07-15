@@ -73,12 +73,21 @@ export function useModelLoader(engineRef: React.MutableRefObject<FragmentsEngine
         const existing = engine.fragments.models.list.get(modelId)
         if (existing) await engine.fragments.disposeModel(modelId)
 
+        // Also register model in OBC FragmentsManager so picking tools can find it
+        try {
+          const obcBuffer = fragBytes.slice(0); // clone to avoid transfer issues
+          await (engine.obcFragments as any).core?.load?.(obcBuffer, { modelId });
+        } catch (e) {
+          console.warn('OBC.FragmentsManager load failed:', e);
+        }
+
         const model = await engine.fragments.load(fragBytes, { modelId })
         model.useCamera(engine.world.camera.three)
 
         model.object.userData.originalPosition = model.object.position.clone()
         model.object.userData.originalRotation = model.object.rotation.clone()
         model.object.userData.originalScale = model.object.scale.clone()
+        model.object.userData.modelId = modelId
 
         // Apply saved delta transforms only if they are non-default (i.e. user has previously positioned this model)
         const hasCustomPosition = transform?.position && (transform.position[0] !== 0 || transform.position[1] !== 0 || transform.position[2] !== 0)
@@ -118,6 +127,9 @@ export function useModelLoader(engineRef: React.MutableRefObject<FragmentsEngine
           } catch {
           }
         }
+        
+        // Notify that the model is fully loaded so overrides can be applied
+        window.dispatchEvent(new CustomEvent('model-loaded', { detail: { modelId } }))
       }
     } catch (err: any) {
       setError(err?.message ?? 'Failed to load model')

@@ -38,6 +38,20 @@ export interface ProjectModelEntry {
   scale?: [number, number, number]
 }
 
+export interface MaterialOverride {
+  id: string
+  modelId: string
+  targetId: number | string // Fragment Item ID or category name
+  targetType: 'item' | 'category'
+  color?: string
+  roughness?: number
+  metalness?: number
+  opacity?: number
+  transparent?: boolean
+  textureDataUrl?: string
+}
+
+
 export interface ProjectCamera {
   position: [number, number, number]
   target: [number, number, number]
@@ -82,6 +96,7 @@ export interface ProjectMeta {
   renderSettings?: ProjectRenderSettings
   isFinProject?: boolean
   apiSettings?: ProjectApiSettings
+  materialOverrides?: Record<string, MaterialOverride>
 }
 
 export interface ProjectApiSettings {

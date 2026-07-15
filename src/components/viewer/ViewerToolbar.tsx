@@ -11,11 +11,13 @@ interface ViewerToolbarProps {
   onTogglePicker: () => void
   dashboardVisible: boolean
   onToggleDashboard: () => void
+  materialPickerActive?: boolean
+  onToggleMaterialPicker?: () => void
 }
 
 import { useState, useEffect } from 'react'
 
-export function ViewerToolbar({ engineRef, onToggleStats, statsVisible, pickerActive, onTogglePicker, dashboardVisible, onToggleDashboard }: ViewerToolbarProps) {
+export function ViewerToolbar({ engineRef, onToggleStats, statsVisible, pickerActive, onTogglePicker, dashboardVisible, onToggleDashboard, materialPickerActive, onToggleMaterialPicker }: ViewerToolbarProps) {
   const engine = engineRef.current
   const [gridActive, setGridActive] = useState(false)
 
@@ -159,6 +161,16 @@ export function ViewerToolbar({ engineRef, onToggleStats, statsVisible, pickerAc
       icon: (
         <svg viewBox="0 0 20 20" fill="currentColor" width="15" height="15">
           <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/>
+        </svg>
+      ),
+    },
+    {
+      title: materialPickerActive ? 'Material Editor Active (Click to disable)' : 'Material Editor',
+      action: onToggleMaterialPicker || (() => {}),
+      active: !!materialPickerActive,
+      icon: (
+        <svg viewBox="0 0 24 24" fill="currentColor" width="15" height="15">
+          <path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8z"/>
         </svg>
       ),
     },
