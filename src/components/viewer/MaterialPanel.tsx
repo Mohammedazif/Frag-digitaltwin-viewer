@@ -204,12 +204,6 @@ export function MaterialPanel({ engineRef }: MaterialPanelProps) {
               </div>
             </div>
 
-            {materialMode === 'texture' && (
-              <div style={{ marginTop: '12px', padding: '8px', background: 'rgba(255,180,0,0.1)', borderLeft: '3px solid #ffb400', fontSize: '11px', color: 'var(--text-muted)' }}>
-                <b>Warning:</b> Custom materials modify the base architectural material. This will affect all other items in the model that share this exact material type.
-              </div>
-            )}
-
             <div className="position-field-group" style={{ marginTop: '12px' }}>
               <label className="position-label">Base Color</label>
               <input 
