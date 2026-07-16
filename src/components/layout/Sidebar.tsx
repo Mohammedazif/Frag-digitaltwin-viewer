@@ -109,8 +109,10 @@ export function Sidebar({ onFiles, engineRef }: SidebarProps) {
       timeOfDay: state.timeOfDay,
       bloomStrength: state.bloomStrength,
       bloomThreshold: state.bloomThreshold,
+      bloomEnabled: state.bloomEnabled,
       fogDensity: state.fogDensity,
       cloudDensity: state.cloudDensity,
+      cloudShadowsEnabled: state.cloudShadowsEnabled,
       cloudSpeed: state.cloudSpeed,
       dofEnabled: state.dofEnabled,
       dofFocus: state.dofFocus,
@@ -119,7 +121,11 @@ export function Sidebar({ onFiles, engineRef }: SidebarProps) {
       visualSaturation: state.visualSaturation,
       visualTemperature: state.visualTemperature,
       visualContrast: state.visualContrast,
-      visualVignette: state.visualVignette
+      visualVignette: state.visualVignette,
+      godRaysEnabled: state.godRaysEnabled,
+      godRayStrength: state.godRayStrength,
+      chromaticAberration: state.chromaticAberration,
+      autoFocus: state.autoFocus
     }
 
     await saveViewAndSettings(

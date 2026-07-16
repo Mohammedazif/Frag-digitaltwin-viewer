@@ -36,7 +36,7 @@ export function MaterialPanel({ engineRef }: MaterialPanelProps) {
 
   // Sync open state with active picker
   useEffect(() => {
-    if (materialPickerActive) setOpen(true)
+    setOpen(materialPickerActive)
   }, [materialPickerActive])
 
   // When selection changes, attempt to load existing overrides

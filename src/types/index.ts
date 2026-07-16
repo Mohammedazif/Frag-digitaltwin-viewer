@@ -66,8 +66,10 @@ export interface ProjectRenderSettings {
   timeOfDay: number
   bloomStrength: number
   bloomThreshold: number
+  bloomEnabled?: boolean
   fogDensity: number
   cloudDensity: number
+  cloudShadowsEnabled?: boolean
   cloudSpeed: number
   dofEnabled: boolean
   dofFocus: number
@@ -77,6 +79,10 @@ export interface ProjectRenderSettings {
   visualTemperature: number
   visualContrast: number
   visualVignette: number
+  godRaysEnabled?: boolean
+  godRayStrength?: number
+  chromaticAberration?: number
+  autoFocus?: boolean
 }
 
 export interface ProjectMeta {
