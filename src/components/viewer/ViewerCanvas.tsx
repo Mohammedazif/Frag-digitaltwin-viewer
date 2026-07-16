@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import * as THREE from 'three'
 import * as OBC from '@thatopen/components'
+import * as OBF from '@thatopen/components-front'
 import { useFragmentsEngine } from '@/hooks/useFragmentsEngine'
 import { useModelLoader } from '@/hooks/useModelLoader'
 import { useMaterialOverrides } from '@/hooks/useMaterialOverrides'
@@ -138,74 +139,121 @@ export function ViewerCanvas({ onEngineReady, adminMode = true, isFinProject = f
     }
   }, [statsVisible])
 
-  // Draw selection border (BoxHelper)
+  // Draw selection edges (EdgesGeometry for both IFC and GLB)
   useEffect(() => {
     const engine = engineRef.current;
     if (!engine) return;
 
-    let boxHelper = engine.world.scene.three.getObjectByName('selection-border-helper') as THREE.Box3Helper;
-    if (!boxHelper) {
-      boxHelper = new THREE.Box3Helper(new THREE.Box3(), new THREE.Color(0xffff00));
-      boxHelper.name = 'selection-border-helper';
-      boxHelper.visible = false;
-      engine.world.scene.three.add(boxHelper);
+    let glbEdges = engine.world.scene.three.getObjectByName('glb-selection-edges') as THREE.LineSegments;
+    if (!glbEdges) {
+      glbEdges = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffff00, depthTest: false }));
+      glbEdges.name = 'glb-selection-edges';
+      glbEdges.visible = false;
+      engine.world.scene.three.add(glbEdges);
     }
 
     if (materialPickerActive && selectedMaterialElement) {
       const { modelId, id } = selectedMaterialElement;
       const model = engine.fragments.models.list.get(modelId) as any;
       
-      if (model) {
-        boxHelper.visible = false;
-        const getBox = async () => {
+      glbEdges.visible = false;
+
+      if (model && typeof model.getItemsGeometry === 'function') {
+        const fetchEdges = async () => {
           try {
-            // First try uniqube's getBoxes (Fragments v3)
-            if (typeof model.getBoxes === 'function') {
-              const boxes = await model.getBoxes([id]);
-              if (boxes && boxes.length > 0) {
-                const union = new THREE.Box3();
-                for (const b of boxes) {
-                  if (!b.isEmpty()) union.union(b);
-                }
-                if (!union.isEmpty()) {
-                  if (model.object && typeof model.object.updateMatrixWorld === 'function') {
-                    model.object.updateMatrixWorld(true);
-                    union.applyMatrix4(model.object.matrixWorld);
-                  }
-                  boxHelper.box.copy(union);
-                  boxHelper.box.expandByScalar(0.01);
-                  boxHelper.visible = true;
-                }
+            const geometries = await model.getItemsGeometry([id]);
+            if (geometries && geometries[0] && geometries[0].length > 0) {
+              let totalPositions = 0;
+              let totalIndices = 0;
+              for (const meshData of geometries[0]) {
+                if (!meshData.positions) continue;
+                totalPositions += meshData.positions.length / 3;
+                totalIndices += meshData.indices ? meshData.indices.length : meshData.positions.length / 3;
               }
-            } else if (typeof model.getBoundingBox === 'function') {
-              const box = await model.getBoundingBox([id]);
-              if (box && !box.isEmpty()) {
-                if (model.object && typeof model.object.updateMatrixWorld === 'function') {
-                  model.object.updateMatrixWorld(true);
-                  box.applyMatrix4(model.object.matrixWorld);
+
+              if (totalPositions > 0) {
+                const posArray = new Float32Array(totalPositions * 3);
+                const indexArray = new Uint32Array(totalIndices);
+
+                let posOffset = 0;
+                let idxOffset = 0;
+                let vertexOffset = 0;
+                const tempVec = new THREE.Vector3();
+
+                for (const meshData of geometries[0]) {
+                  if (!meshData.positions) continue;
+                  
+                  let matrix = new THREE.Matrix4();
+                  if (meshData.transform instanceof THREE.Matrix4) {
+                    matrix.copy(meshData.transform);
+                  } else if (Array.isArray(meshData.transform)) {
+                    matrix.fromArray(meshData.transform);
+                  } else if ((meshData.transform as any).elements) {
+                    matrix.fromArray((meshData.transform as any).elements);
+                  }
+                  
+                  const pos = meshData.positions;
+                  for (let i = 0; i < pos.length; i += 3) {
+                    tempVec.set(pos[i], pos[i + 1], pos[i + 2]);
+                    tempVec.applyMatrix4(matrix);
+                    posArray[posOffset++] = tempVec.x;
+                    posArray[posOffset++] = tempVec.y;
+                    posArray[posOffset++] = tempVec.z;
+                  }
+                  
+                  if (meshData.indices) {
+                    for (let i = 0; i < meshData.indices.length; i++) {
+                      indexArray[idxOffset++] = meshData.indices[i] + vertexOffset;
+                    }
+                  } else {
+                    for (let i = 0; i < pos.length / 3; i++) {
+                      indexArray[idxOffset++] = i + vertexOffset;
+                    }
+                  }
+                  vertexOffset += pos.length / 3;
                 }
-                boxHelper.box.copy(box);
-                boxHelper.box.expandByScalar(0.01);
-                boxHelper.visible = true;
+
+                const geom = new THREE.BufferGeometry();
+                geom.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
+                geom.setIndex(new THREE.BufferAttribute(indexArray, 1));
+                
+                glbEdges.geometry.dispose();
+                glbEdges.geometry = new THREE.EdgesGeometry(geom);
+                
+                // IF the model itself has a transform (like when positioned in the scene), apply it to the mesh matrix
+                if (model.object && model.object.matrixWorld) {
+                   glbEdges.matrix.copy(model.object.matrixWorld);
+                } else {
+                   glbEdges.matrix.identity();
+                }
+                glbEdges.matrixAutoUpdate = false;
+                glbEdges.visible = true;
               }
             }
-          } catch (e) {}
-        }
-        getBox();
+          } catch (e) {
+            console.warn('[ViewerCanvas] Failed to extract edges for IFC element:', e);
+          }
+        };
+        fetchEdges();
       } else {
         // Fallback for GLB standard objects
         const obj = engine.world.scene.three.children.find((c: any) => c.userData?.modelId === modelId);
         if (obj) {
-          const box = new THREE.Box3().setFromObject(obj);
-          if (!box.isEmpty()) {
-            boxHelper.box.copy(box);
-            boxHelper.box.expandByScalar(0.01);
-            boxHelper.visible = true;
+          let mesh: THREE.Mesh | null = null;
+          obj.traverse((child: any) => {
+            if (child.isMesh && !mesh) mesh = child;
+          });
+          if (mesh) {
+            glbEdges.geometry.dispose();
+            glbEdges.geometry = new THREE.EdgesGeometry(mesh.geometry);
+            glbEdges.matrix.copy(mesh.matrixWorld);
+            glbEdges.matrixAutoUpdate = false;
+            glbEdges.visible = true;
           }
         }
       }
     } else {
-      boxHelper.visible = false;
+      if (glbEdges) glbEdges.visible = false;
     }
   }, [selectedMaterialElement, materialPickerActive, engineRef]);
 
@@ -307,62 +355,88 @@ export function ViewerCanvas({ onEngineReady, adminMode = true, isFinProject = f
     
     scene.traverse((child: any) => {
       if (child.isMesh && child.visible && child.name !== 'SkyDome' && child.name !== 'CloudsDome') {
-        try {
-          const hits = raycaster.intersectObject(child, false);
-          allHits.push(...hits);
-        } catch (err) {
-          // Ignore crashing meshes
+        // Check if any parent is hidden
+        let isVisible = true;
+        let curr = child;
+        while (curr) {
+            if (curr.visible === false) {
+                isVisible = false;
+                break;
+            }
+            curr = curr.parent;
+        }
+        
+        if (isVisible) {
+          try {
+            const hits = raycaster.intersectObject(child, false);
+            allHits.push(...hits);
+          } catch (err) {
+            // Ignore crashing meshes
+          }
         }
       }
     });
     
     allHits.sort((a, b) => a.distance - b.distance);
     
-    // Only apply standard raycaster if native failed OR we want to force it
-    if (!hitModelId) {
-      let hits: THREE.Intersection[] = []
-      for (const h of allHits) {
-         const mesh = h.object as THREE.Mesh
-         if (mesh.visible) {
-             hits.push(h)
-         }
-      }
-      hits.sort((a, b) => a.distance - b.distance)
+    let stdHitModelId: string | null = null;
+    let stdHitExpressId: string | null = null;
+    let stdHitPoint: THREE.Vector3 | null = null;
+    let stdHitDistance = Infinity;
 
-      if (hits.length > 0) {
-         const hit = hits[0]
-         hitPoint = hit.point
-         const mesh = hit.object as THREE.Mesh & { getItemID?: (idx: number) => string };
-         console.log(`[ViewerCanvas] Standard hit mesh:`, mesh);
-         
-         let modelId = mesh.userData?.modelId;
-         let curr: any = mesh;
-         while (!modelId && curr.parent) {
-           curr = curr.parent;
-           modelId = curr.userData?.modelId;
-         }
-         
-         if (!modelId) {
-           for (const [id, model] of engine.fragments.models.list.entries()) {
-             const m = model as any;
-             if (m === mesh || m.object === mesh || m === curr || m.object === curr) {
-               modelId = id; break;
-             }
-             if (m.children?.includes(mesh) || m.items?.some((i: any) => i.mesh === mesh)) {
-               modelId = id; break;
-             }
+    let hits: THREE.Intersection[] = []
+    for (const h of allHits) {
+       const mesh = h.object as THREE.Mesh
+       if (mesh.visible) {
+           hits.push(h)
+       }
+    }
+    hits.sort((a, b) => a.distance - b.distance)
+
+    if (hits.length > 0) {
+       const hit = hits[0]
+       stdHitDistance = hit.distance;
+       stdHitPoint = hit.point;
+       const mesh = hit.object as THREE.Mesh & { getItemID?: (idx: number) => string };
+       
+       let modelId = mesh.userData?.modelId;
+       let curr: any = mesh;
+       while (!modelId && curr.parent) {
+         curr = curr.parent;
+         modelId = curr.userData?.modelId;
+       }
+       
+       if (!modelId) {
+         for (const [id, model] of engine.fragments.models.list.entries()) {
+           const m = model as any;
+           if (m === mesh || m.object === mesh || m === curr || m.object === curr) {
+             modelId = id; break;
+           }
+           if (m.children?.includes(mesh) || m.items?.some((i: any) => i.mesh === mesh)) {
+             modelId = id; break;
            }
          }
+       }
 
-         if (modelId) {
-            hitModelId = modelId;
-            hitExpressId = hit.instanceId?.toString() || (hit as any).batchId?.toString() || (hit as any).localId?.toString() || '0';
-            if (typeof mesh.getItemID === 'function' && hit.instanceId !== undefined) {
-              hitExpressId = mesh.getItemID(hit.instanceId);
-            }
-            console.log(`[ViewerCanvas] Standard hit ACCEPTED. modelId: ${hitModelId}, expressId: ${hitExpressId}`);
-         }
-      }
+       if (modelId) {
+          stdHitModelId = modelId;
+          
+          let expressId = mesh.userData?.expressId;
+          if (mesh.userData?.faceToExpressId && hit.faceIndex !== undefined) {
+             expressId = mesh.userData.faceToExpressId[hit.faceIndex];
+          }
+          
+          stdHitExpressId = expressId?.toString() || hit.instanceId?.toString() || (hit as any).batchId?.toString() || (hit as any).localId?.toString() || '0';
+          if (typeof mesh.getItemID === 'function' && hit.instanceId !== undefined) {
+            stdHitExpressId = mesh.getItemID(hit.instanceId);
+          }
+       }
+    }
+
+    if (stdHitModelId && stdHitExpressId && stdHitDistance < fragHitDistance) {
+       hitModelId = stdHitModelId;
+       hitExpressId = stdHitExpressId;
+       if (stdHitPoint) hitPoint = stdHitPoint;
     }
 
     if (hitModelId && hitExpressId) {

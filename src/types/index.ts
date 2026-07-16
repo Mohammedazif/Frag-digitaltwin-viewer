@@ -49,6 +49,7 @@ export interface MaterialOverride {
   opacity?: number
   transparent?: boolean
   textureDataUrl?: string
+  textureScale?: number
 }
 
 

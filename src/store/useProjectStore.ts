@@ -147,8 +147,18 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const { currentProject, folderHandle } = get()
     if (!currentProject || !folderHandle) return
     const updated = { ...currentProject, updatedAt: Date.now() }
-    await saveProjectMeta(folderHandle, updated)
-    await cacheHandle(updated.projectId, folderHandle, updated, (updated as any).thumbnail)
+    
+    try {
+      await saveProjectMeta(folderHandle, updated)
+      await cacheHandle(updated.projectId, folderHandle, updated, (updated as any).thumbnail)
+    } catch (err: any) {
+      if (err?.message?.includes('state cached in an interface object')) {
+        alert("The project files were modified externally. Please close and re-open the project folder.");
+      } else {
+        alert("Failed to save changes: " + err?.message);
+      }
+      return;
+    }
 
     const recent = get().recentProjects.map(r =>
       r.meta.projectId === updated.projectId ? { ...r, meta: updated } : r
@@ -207,15 +217,24 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       type: model.type,
     }
 
-    await saveModelToProject(folderHandle, { ...entry, fragBytes: bytesCopy })
-
     const updated: ProjectMeta = {
       ...currentProject,
       models: [...currentProject.models, entry],
       updatedAt: Date.now(),
     }
-    await saveProjectMeta(folderHandle, updated)
-    await cacheHandle(updated.projectId, folderHandle, updated, (updated as any).thumbnail)
+    
+    try {
+      await saveModelToProject(folderHandle, { ...entry, fragBytes: bytesCopy })
+      await saveProjectMeta(folderHandle, updated)
+      await cacheHandle(updated.projectId, folderHandle, updated, (updated as any).thumbnail)
+    } catch (err: any) {
+      if (err?.message?.includes('state cached in an interface object')) {
+        alert("The project files were modified externally. Please close and re-open the project folder.");
+      } else {
+        alert("Failed to save changes: " + err?.message);
+      }
+      throw err; // rethrow so the caller (like useIfcConverter) knows it failed
+    }
 
     const recent = get().recentProjects.map(r =>
       r.meta.projectId === updated.projectId ? { ...r, meta: updated } : r
@@ -229,14 +248,23 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const { currentProject, folderHandle } = get()
     if (!currentProject || !folderHandle) return
 
-    await deleteModelFromProject(folderHandle, modelId)
-
     const updated: ProjectMeta = {
       ...currentProject,
       models: currentProject.models.filter(m => m.modelId !== modelId),
       updatedAt: Date.now(),
     }
-    await saveProjectMeta(folderHandle, updated)
+    
+    try {
+      await deleteModelFromProject(folderHandle, modelId)
+      await saveProjectMeta(folderHandle, updated)
+    } catch (err: any) {
+      if (err?.message?.includes('state cached in an interface object')) {
+        alert("The project files were modified externally. Please close and re-open the project folder.");
+      } else {
+        alert("Failed to save changes: " + err?.message);
+      }
+      return;
+    }
 
     const recent = get().recentProjects.map(r =>
       r.meta.projectId === updated.projectId ? { ...r, meta: updated } : r
@@ -261,8 +289,18 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const { folderHandle, currentProject, recentProjects } = get()
     if (!folderHandle || !currentProject) return
     const updated = { ...currentProject, camera, renderSettings }
-    await saveProjectMeta(folderHandle, updated)
-    await cacheHandle(updated.projectId, folderHandle, updated, (updated as any).thumbnail)
+    
+    try {
+      await saveProjectMeta(folderHandle, updated)
+      await cacheHandle(updated.projectId, folderHandle, updated, (updated as any).thumbnail)
+    } catch (err: any) {
+      if (err?.message?.includes('state cached in an interface object')) {
+        alert("The project files were modified externally. Please close and re-open the project folder.");
+      } else {
+        alert("Failed to save changes: " + err?.message);
+      }
+      return;
+    }
     
     const updatedRecent = recentProjects.map(r => 
       r.meta.projectId === updated.projectId ? { ...r, meta: updated } : r
@@ -282,7 +320,17 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       ),
       updatedAt: Date.now(),
     }
-    await saveProjectMeta(folderHandle, updated)
+    
+    try {
+      await saveProjectMeta(folderHandle, updated)
+    } catch (err: any) {
+      if (err?.message?.includes('state cached in an interface object')) {
+        alert("The project files were modified externally. Please close and re-open the project folder.");
+      } else {
+        alert("Failed to save changes: " + err?.message);
+      }
+      return;
+    }
 
     const recent = get().recentProjects.map(r =>
       r.meta.projectId === updated.projectId ? { ...r, meta: updated } : r
@@ -302,7 +350,18 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       materialOverrides,
       updatedAt: Date.now(),
     }
-    await saveProjectMeta(folderHandle, updated)
+    
+    try {
+      await saveProjectMeta(folderHandle, updated)
+    } catch (err: any) {
+      if (err?.message?.includes('state cached in an interface object')) {
+        alert("The project files were modified by another program (e.g., Unreal Engine). Please close and re-open the project folder to save your changes.");
+      } else {
+        console.error(err);
+        alert("Failed to save changes: " + err?.message);
+      }
+      return;
+    }
 
     const recent = get().recentProjects.map(r =>
       r.meta.projectId === updated.projectId ? { ...r, meta: updated } : r
@@ -322,7 +381,18 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       materialOverrides,
       updatedAt: Date.now(),
     }
-    await saveProjectMeta(folderHandle, updated)
+    
+    try {
+      await saveProjectMeta(folderHandle, updated)
+    } catch (err: any) {
+      if (err?.message?.includes('state cached in an interface object')) {
+        alert("The project files were modified by another program (e.g., Unreal Engine). Please close and re-open the project folder to save your changes.");
+      } else {
+        console.error(err);
+        alert("Failed to save changes: " + err?.message);
+      }
+      return;
+    }
 
     const recent = get().recentProjects.map(r =>
       r.meta.projectId === updated.projectId ? { ...r, meta: updated } : r

@@ -53,10 +53,25 @@ export async function verifyHandlePermission(handle: FileSystemDirectoryHandle):
 // ─── File System Operations ───────────────────────────────────────────────────
 
 export async function writeJson(dir: FileSystemDirectoryHandle, filename: string, data: object) {
-  const fh = await dir.getFileHandle(filename, { create: true })
-  const writable = await fh.createWritable()
-  await writable.write(JSON.stringify(data, null, 2))
-  await writable.close()
+  let lastErr;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const fh = await dir.getFileHandle(filename, { create: true })
+      const writable = await fh.createWritable()
+      await writable.write(JSON.stringify(data, null, 2))
+      await writable.close()
+      return;
+    } catch (err: any) {
+      lastErr = err;
+      if (err?.message?.includes('state cached in an interface object')) {
+        // Wait 250ms and retry, the file might be temporarily scanned/locked by UE/AV
+        await new Promise(r => setTimeout(r, 250));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
 }
 
 export async function readJson<T>(dir: FileSystemDirectoryHandle, filename: string): Promise<T | null> {
@@ -70,10 +85,25 @@ export async function readJson<T>(dir: FileSystemDirectoryHandle, filename: stri
 }
 
 export async function writeBinary(dir: FileSystemDirectoryHandle, filename: string, data: ArrayBuffer | Uint8Array) {
-  const fh = await dir.getFileHandle(filename, { create: true })
-  const writable = await fh.createWritable()
-  await writable.write(new Blob([data as unknown as BlobPart]))
-  await writable.close()
+  let lastErr;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const fh = await dir.getFileHandle(filename, { create: true })
+      const writable = await fh.createWritable()
+      await writable.write(new Blob([data as unknown as BlobPart]))
+      await writable.close()
+      return;
+    } catch (err: any) {
+      lastErr = err;
+      if (err?.message?.includes('state cached in an interface object')) {
+        // Wait 250ms and retry in case of external watcher lock
+        await new Promise(r => setTimeout(r, 250));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
 }
 
 export async function readBinary(dir: FileSystemDirectoryHandle, filename: string): Promise<ArrayBuffer | null> {

@@ -29,6 +29,7 @@ export function MaterialPanel({ engineRef }: MaterialPanelProps) {
   const [opacity, setOpacity] = useState('1.0')
   const [transparent, setTransparent] = useState(false)
   const [textureDataUrl, setTextureDataUrl] = useState<string>('')
+  const [textureScale, setTextureScale] = useState<string>('0.001')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [open, setOpen] = useState(false)
@@ -56,11 +57,13 @@ export function MaterialPanel({ engineRef }: MaterialPanelProps) {
           if (existing.roughness !== undefined) setRoughness(existing.roughness.toString())
           if (existing.metalness !== undefined) setMetalness(existing.metalness.toString())
           if (existing.textureDataUrl) setTextureDataUrl(existing.textureDataUrl)
+          if (existing.textureScale !== undefined) setTextureScale(existing.textureScale.toString())
         } else {
           setMaterialMode('color')
           setRoughness('0.8')
           setMetalness('0.1')
           setTextureDataUrl('')
+          setTextureScale('0.001')
         }
       } else {
         // Defaults
@@ -71,6 +74,7 @@ export function MaterialPanel({ engineRef }: MaterialPanelProps) {
         setRoughness('0.8')
         setMetalness('0.1')
         setTextureDataUrl('')
+        setTextureScale('0.001')
       }
     }
   }, [selectedElement, targetType, currentProject])
@@ -103,7 +107,8 @@ export function MaterialPanel({ engineRef }: MaterialPanelProps) {
       transparent,
       roughness: materialMode === 'texture' ? parseFloat(roughness) : undefined,
       metalness: materialMode === 'texture' ? parseFloat(metalness) : undefined,
-      textureDataUrl: materialMode === 'texture' ? (textureDataUrl || undefined) : undefined
+      textureDataUrl: materialMode === 'texture' ? (textureDataUrl || undefined) : undefined,
+      textureScale: materialMode === 'texture' ? parseFloat(textureScale) : undefined
     }
 
     await setMaterialOverride(selectedElement.modelId, override)
@@ -265,7 +270,24 @@ export function MaterialPanel({ engineRef }: MaterialPanelProps) {
                     )}
                   </div>
                   {textureDataUrl && (
-                    <div style={{ marginTop: '8px', width: '100%', height: '60px', backgroundImage: `url(${textureDataUrl})`, backgroundSize: 'cover', backgroundPosition: 'center', borderRadius: '4px', border: '1px solid var(--border-soft)' }} />
+                    <>
+                      <div style={{ marginTop: '8px', width: '100%', height: '60px', backgroundImage: `url(${textureDataUrl})`, backgroundSize: 'cover', backgroundPosition: 'center', borderRadius: '4px', border: '1px solid var(--border-soft)' }} />
+                      
+                      <div className="position-field-group" style={{ marginTop: '12px' }}>
+                        <label className="position-label" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span>Texture Scale</span>
+                          <input 
+                            type="number" 
+                            step="0.001" 
+                            value={textureScale} 
+                            onChange={e => setTextureScale(e.target.value)} 
+                            style={{ width: '60px', fontSize: '11px', padding: '2px', background: 'var(--bg)', border: '1px solid var(--border-soft)', color: 'var(--text)' }} 
+                          />
+                        </label>
+                        <input type="range" min="0.0001" max="10.0" step="0.001" value={textureScale} onChange={e => setTextureScale(e.target.value)} style={{ width: '100%' }} />
+                        <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '2px' }}>Adjust if the texture looks too pixelated or stretched.</div>
+                      </div>
+                    </>
                   )}
                 </div>
               </>
