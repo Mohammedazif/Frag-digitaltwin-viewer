@@ -30,16 +30,21 @@ interface AppState {
   godRayStrength: number
   chromaticAberration: number
   autoFocus: boolean
+  ambientOcclusion: boolean
+  outlineEdges: boolean
+  pbrMaterials: boolean
   materialPickerActive: boolean
   selectedMaterialElement: { modelId: string, id: number, category?: string } | null
+  copiedMaterial: any | null
 
   setStep: (step: AppStep) => void
   setProgress: (progress: number, label?: string) => void
   setError: (error: string) => void
   setRealisticMode: (enabled: boolean) => void
-  setLightingParams: (params: Partial<{ exposure: number, lightIntensity: number, ambientIntensity: number, timeOfDay: number, bloomStrength: number, bloomThreshold: number, bloomEnabled: boolean, fogDensity: number, cloudDensity: number, cloudShadowsEnabled: boolean, cloudSpeed: number, dofEnabled: boolean, dofFocus: number, dofAperture: number, dofMaxBlur: number, visualSaturation: number, visualTemperature: number, visualContrast: number, visualVignette: number, godRaysEnabled: boolean, godRayStrength: number, chromaticAberration: number, autoFocus: boolean }>) => void
+  setLightingParams: (params: Partial<{ exposure: number, lightIntensity: number, ambientIntensity: number, timeOfDay: number, bloomStrength: number, bloomThreshold: number, bloomEnabled: boolean, fogDensity: number, cloudDensity: number, cloudShadowsEnabled: boolean, cloudSpeed: number, dofEnabled: boolean, dofFocus: number, dofAperture: number, dofMaxBlur: number, visualSaturation: number, visualTemperature: number, visualContrast: number, visualVignette: number, godRaysEnabled: boolean, godRayStrength: number, chromaticAberration: number, autoFocus: boolean, ambientOcclusion: boolean, outlineEdges: boolean, pbrMaterials: boolean }>) => void
   setMaterialPickerActive: (active: boolean) => void
   setSelectedMaterialElement: (element: { modelId: string, id: number, category?: string } | null) => void
+  setCopiedMaterial: (material: any) => void
   reset: () => void
 }
 
@@ -72,8 +77,12 @@ export const useAppStore = create<AppState>((set) => ({
   godRayStrength: 0.8,
   chromaticAberration: 0.0,
   autoFocus: false,
+  ambientOcclusion: false,
+  outlineEdges: false,
+  pbrMaterials: true,
   materialPickerActive: false,
   selectedMaterialElement: null,
+  copiedMaterial: null,
 
   setStep: (step) => set({ step, error: null }),
   setProgress: (progress, label = '') => set({ conversionProgress: progress, conversionStepLabel: label }),
@@ -82,6 +91,7 @@ export const useAppStore = create<AppState>((set) => ({
   setLightingParams: (params) => set((state) => ({ ...state, ...params })),
   setMaterialPickerActive: (materialPickerActive) => set({ materialPickerActive, selectedMaterialElement: null }),
   setSelectedMaterialElement: (selectedMaterialElement) => set({ selectedMaterialElement }),
+  setCopiedMaterial: (copiedMaterial) => set({ copiedMaterial }),
   reset: () =>
     set({
       step: 'idle',
@@ -89,5 +99,8 @@ export const useAppStore = create<AppState>((set) => ({
       conversionStepLabel: '',
       error: null,
       realisticMode: false,
+      materialPickerActive: false,
+      selectedMaterialElement: null,
+      copiedMaterial: null,
     }),
 }))

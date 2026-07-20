@@ -7,6 +7,7 @@ import { useModelLoader } from '@/hooks/useModelLoader'
 import { useMaterialOverrides } from '@/hooks/useMaterialOverrides'
 import { useModelStore } from '@/store/useModelStore'
 import { useAppStore } from '@/store/useAppStore'
+import { useProjectStore } from '@/store/useProjectStore'
 import { ViewerToolbar } from './ViewerToolbar'
 import { ModelPositionPanel } from '@/components/viewer/ModelPositionPanel'
 import { RenderPanel } from '@/components/viewer/RenderPanel'
@@ -71,6 +72,9 @@ export function ViewerCanvas({ onEngineReady, adminMode = true, isFinProject = f
   const godRayStrength = useAppStore(s => s.godRayStrength)
   const chromaticAberration = useAppStore(s => s.chromaticAberration)
   const autoFocus = useAppStore(s => s.autoFocus)
+  const ambientOcclusion = useAppStore(s => s.ambientOcclusion)
+  const outlineEdges = useAppStore(s => s.outlineEdges)
+  const pbrMaterials = useAppStore(s => s.pbrMaterials)
 
   useEffect(() => {
     if (isReady && onEngineReady) onEngineReady(engineRef)
@@ -78,29 +82,41 @@ export function ViewerCanvas({ onEngineReady, adminMode = true, isFinProject = f
 
   useEffect(() => {
     if (isReady && engineRef.current) {
-      engineRef.current.setLightingParams({ realisticMode, exposure, lightIntensity, ambientIntensity, timeOfDay, bloomStrength, bloomThreshold, bloomEnabled, fogDensity, cloudDensity, cloudShadowsEnabled, cloudSpeed, dofEnabled, dofFocus, dofAperture, dofMaxBlur, visualSaturation, visualTemperature, visualContrast, visualVignette, godRaysEnabled, godRayStrength, chromaticAberration, autoFocus })
+      engineRef.current.setLightingParams({ realisticMode, exposure, lightIntensity, ambientIntensity, timeOfDay, bloomStrength, bloomThreshold, bloomEnabled, fogDensity, cloudDensity, cloudShadowsEnabled, cloudSpeed, dofEnabled, dofFocus, dofAperture, dofMaxBlur, visualSaturation, visualTemperature, visualContrast, visualVignette, godRaysEnabled, godRayStrength, chromaticAberration, autoFocus, ambientOcclusion, outlineEdges, pbrMaterials })
     }
-  }, [realisticMode, exposure, lightIntensity, ambientIntensity, timeOfDay, bloomStrength, bloomThreshold, bloomEnabled, fogDensity, cloudDensity, cloudShadowsEnabled, cloudSpeed, dofEnabled, dofFocus, dofAperture, dofMaxBlur, visualSaturation, visualTemperature, visualContrast, visualVignette, godRaysEnabled, godRayStrength, chromaticAberration, autoFocus, isReady])
+  }, [realisticMode, exposure, lightIntensity, ambientIntensity, timeOfDay, bloomStrength, bloomThreshold, bloomEnabled, fogDensity, cloudDensity, cloudShadowsEnabled, cloudSpeed, dofEnabled, dofFocus, dofAperture, dofMaxBlur, visualSaturation, visualTemperature, visualContrast, visualVignette, godRaysEnabled, godRayStrength, chromaticAberration, autoFocus, ambientOcclusion, outlineEdges, pbrMaterials, isReady])
 
   const loadedIdsRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     if (!isReady) return
     const currentModels = useModelStore.getState().models
+    const hasCamera = !!useProjectStore.getState().currentProject?.camera
     if (currentModels.length === 0) {
       loadedIdsRef.current.clear()
     }
-    currentModels.forEach(model => {
-      if (model.fragBytes && !loadedIdsRef.current.has(model.modelId)) {
-        loadedIdsRef.current.add(model.modelId)
-        loadModel(model.fragBytes, model.modelId, model.type, {
-          position: model.position,
-          rotation: model.rotation,
-          scale: model.scale,
-        }, adminMode) 
+
+    const loadSequentially = async () => {
+      for (const model of currentModels) {
+        if (model.fragBytes && !loadedIdsRef.current.has(model.modelId)) {
+          loadedIdsRef.current.add(model.modelId)
+          await loadModel(model.fragBytes, model.modelId, model.type, {
+            position: model.position,
+            rotation: model.rotation,
+            scale: model.scale,
+          }, adminMode && !hasCamera) 
+        }
       }
-    })
+    }
+
+    loadSequentially()
   }, [models, isReady])
+
+  useEffect(() => {
+    // Reset picker panels when a new project loads or when we leave the viewer
+    setPickerActive(false)
+    useAppStore.getState().setMaterialPickerActive(false)
+  }, [useProjectStore.getState().currentProject?.projectId])
 
   useEffect(() => {
     if (!isReady || !statsContainerRef.current) return
@@ -515,10 +531,10 @@ export function ViewerCanvas({ onEngineReady, adminMode = true, isFinProject = f
           onToggleStats={() => setStatsVisible(v => !v)}
           statsVisible={statsVisible}
           pickerActive={pickerActive}
-          onTogglePicker={() => setPickerActive(v => {
-            if (!v) setMaterialPickerActive(false)
-            return !v
-          })}
+          onTogglePicker={() => {
+            setPickerActive(!pickerActive)
+            if (!pickerActive) setMaterialPickerActive(false)
+          }}
           dashboardVisible={dashboardVisible}
           onToggleDashboard={() => setDashboardVisible(v => !v)}
           materialPickerActive={materialPickerActive}
@@ -531,7 +547,7 @@ export function ViewerCanvas({ onEngineReady, adminMode = true, isFinProject = f
 
       {/* Right side panels */}
       {step === 'viewing' && adminMode && (
-        <div className="right-panels-container">
+        <div className="right-panels-container" key={useProjectStore.getState().currentProject?.projectId || 'empty'}>
           <RenderPanel />
           <ModelPositionPanel 
             engineRef={engineRef} 

@@ -74,6 +74,10 @@ export function Sidebar({ onFiles, engineRef }: SidebarProps) {
       })
     }
     clearModels()
+    useAppStore.getState().setMaterialPickerActive(false)
+    useAppStore.getState().setSelectedMaterialElement(null)
+    useModelStore.getState().setActiveModelId(null)
+    
     if (currentProject) {
       closeProject()
       setStep('projects')
@@ -125,7 +129,10 @@ export function Sidebar({ onFiles, engineRef }: SidebarProps) {
       godRaysEnabled: state.godRaysEnabled,
       godRayStrength: state.godRayStrength,
       chromaticAberration: state.chromaticAberration,
-      autoFocus: state.autoFocus
+      autoFocus: state.autoFocus,
+      ambientOcclusion: state.ambientOcclusion,
+      outlineEdges: state.outlineEdges,
+      pbrMaterials: state.pbrMaterials
     }
 
     await saveViewAndSettings(

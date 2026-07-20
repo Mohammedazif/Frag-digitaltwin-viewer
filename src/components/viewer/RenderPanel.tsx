@@ -133,6 +133,9 @@ export function RenderPanel() {
   const chromaticAberration = useAppStore(s => s.chromaticAberration)
   const autoFocus           = useAppStore(s => s.autoFocus)
   const bloomEnabled        = useAppStore(s => s.bloomEnabled)
+  const ambientOcclusion    = useAppStore(s => s.ambientOcclusion)
+  const outlineEdges        = useAppStore(s => s.outlineEdges)
+  const pbrMaterials        = useAppStore(s => s.pbrMaterials)
 
   const setRealisticMode  = useAppStore(s => s.setRealisticMode)
   const setLightingParams = useAppStore(s => s.setLightingParams)
@@ -295,6 +298,21 @@ export function RenderPanel() {
                 onChange={v => setLightingParams({ visualVignette: v })} />
               <Slider label="Chromatic Aberration" value={chromaticAberration} min={0} max={1} step={0.05}
                 onChange={v => setLightingParams({ chromaticAberration: v })} />
+
+              {/* ── Post-Processing ──────────────────────────────────── */}
+              <SectionDivider label="Post-Processing" />
+              <Toggle label="Ambient Occlusion"
+                checked={ambientOcclusion}
+                onChange={v => setLightingParams({ ambientOcclusion: v })} />
+              <Toggle label="Fine Outlines"
+                checked={outlineEdges}
+                onChange={v => setLightingParams({ outlineEdges: v })} />
+
+              {/* ── Materials ────────────────────────────────────────── */}
+              <SectionDivider label="Materials" />
+              <Toggle label="Enable PBR Materials"
+                checked={pbrMaterials}
+                onChange={v => setLightingParams({ pbrMaterials: v })} />
 
             </div>
           )}

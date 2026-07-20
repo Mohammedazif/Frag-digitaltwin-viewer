@@ -12,6 +12,9 @@ export function Header() {
 
   const handleBack = () => {
     clearModels()
+    useAppStore.getState().setMaterialPickerActive(false)
+    useAppStore.getState().setSelectedMaterialElement(null)
+    useModelStore.getState().setActiveModelId(null)
     closeProject()
     setStep('projects')
   }

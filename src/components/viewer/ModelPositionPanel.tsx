@@ -148,6 +148,50 @@ export function ModelPositionPanel({ engineRef, pickedCoord, onClearPickedCoord 
     if (e.key === 'Enter') handleApply()
   }
 
+  const handleCopy = (type: 'position' | 'rotation' | 'scale') => {
+    let str = '';
+    if (type === 'position') str = `(X=${px},Y=${py},Z=${pz})`;
+    if (type === 'rotation') str = `(X=${rx},Y=${ry},Z=${rz})`;
+    if (type === 'scale') str = `(X=${sx},Y=${sy},Z=${sz})`;
+    navigator.clipboard.writeText(str).catch(() => {});
+  }
+
+  const parseAndApplyPaste = (text: string, type: 'position' | 'rotation' | 'scale') => {
+    let x, y, z;
+    const match = text.match(/X=([\d.-]+).*?Y=([\d.-]+).*?Z=([\d.-]+)/i);
+    if (match) {
+      x = match[1]; y = match[2]; z = match[3];
+    } else {
+      const parts = text.replace(/[()]/g, '').split(',').map(s => s.trim());
+      if (parts.length === 3 && !isNaN(parseFloat(parts[0]))) {
+        x = parts[0]; y = parts[1]; z = parts[2];
+      }
+    }
+    if (x !== undefined && y !== undefined && z !== undefined) {
+      if (type === 'position') { setPX(x); setPY(y); setPZ(z); }
+      if (type === 'rotation') { setRX(x); setRY(y); setRZ(z); }
+      if (type === 'scale') { setSX(x); setSY(y); setSZ(z); }
+      return true;
+    }
+    return false;
+  }
+
+  const handlePasteClick = async (type: 'position' | 'rotation' | 'scale') => {
+    try {
+      const text = await navigator.clipboard.readText();
+      parseAndApplyPaste(text, type);
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  const handlePasteInput = (e: React.ClipboardEvent, type: 'position' | 'rotation' | 'scale') => {
+    const text = e.clipboardData.getData('text');
+    if (parseAndApplyPaste(text, type)) {
+      e.preventDefault();
+    }
+  }
+
   return (
     <div className={`position-panel ${open ? 'open' : ''}`}>
       {/* Toggle tab */}
@@ -163,7 +207,7 @@ export function ModelPositionPanel({ engineRef, pickedCoord, onClearPickedCoord 
       </button>
 
       {/* Panel body */}
-      <div className="position-panel-body" style={{ maxHeight: '280px' }}>
+      <div className="position-panel-body" style={{ maxHeight: '320px' }}>
         <div className="position-panel-header">
           <svg viewBox="0 0 20 20" fill="currentColor" width="14" height="14" style={{ color: 'var(--accent)' }}>
             <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/>
@@ -215,36 +259,66 @@ export function ModelPositionPanel({ engineRef, pickedCoord, onClearPickedCoord 
 
         {/* Transform Inputs */}
         <div className="position-field-group">
-          <label className="position-label">Position (World Units)</label>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+            <label className="position-label" style={{ marginBottom: 0 }}>Position (World Units)</label>
+            <div style={{ display: 'flex', gap: '2px' }}>
+              <button onClick={() => handleCopy('position')} title="Copy (X=..., Y=..., Z=...)" style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '2px' }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              </button>
+              <button onClick={() => handlePasteClick('position')} title="Paste (X=..., Y=..., Z=...)" style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '2px' }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+              </button>
+            </div>
+          </div>
           <div className="position-xyz-row">
             {([['X', px, setPX], ['Y', py, setPY], ['Z', pz, setPZ]] as const).map(([axis, val, setter]) => (
               <div key={axis} className="position-xyz-field">
                 <span className="position-axis-label">{axis}</span>
-                <input className="position-input" type="number" step="0.1" value={val} onChange={e => setter(e.target.value)} onKeyDown={handleKeyDown} disabled={!activeModelId} />
+                <input className="position-input" type="number" step="0.1" value={val} onChange={e => setter(e.target.value)} onKeyDown={handleKeyDown} onPaste={e => handlePasteInput(e, 'position')} disabled={!activeModelId} />
               </div>
             ))}
           </div>
         </div>
 
         <div className="position-field-group" style={{ marginTop: '4px' }}>
-          <label className="position-label">Rotation (Degrees)</label>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+            <label className="position-label" style={{ marginBottom: 0 }}>Rotation (Degrees)</label>
+            <div style={{ display: 'flex', gap: '2px' }}>
+              <button onClick={() => handleCopy('rotation')} title="Copy (X=..., Y=..., Z=...)" style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '2px' }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              </button>
+              <button onClick={() => handlePasteClick('rotation')} title="Paste (X=..., Y=..., Z=...)" style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '2px' }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+              </button>
+            </div>
+          </div>
           <div className="position-xyz-row">
             {([['X', rx, setRX], ['Y', ry, setRY], ['Z', rz, setRZ]] as const).map(([axis, val, setter]) => (
               <div key={axis} className="position-xyz-field">
                 <span className="position-axis-label">{axis}</span>
-                <input className="position-input" type="number" step="1" value={val} onChange={e => setter(e.target.value)} onKeyDown={handleKeyDown} disabled={!activeModelId} />
+                <input className="position-input" type="number" step="1" value={val} onChange={e => setter(e.target.value)} onKeyDown={handleKeyDown} onPaste={e => handlePasteInput(e, 'rotation')} disabled={!activeModelId} />
               </div>
             ))}
           </div>
         </div>
 
         <div className="position-field-group" style={{ marginTop: '4px' }}>
-          <label className="position-label">Scale</label>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+            <label className="position-label" style={{ marginBottom: 0 }}>Scale</label>
+            <div style={{ display: 'flex', gap: '2px' }}>
+              <button onClick={() => handleCopy('scale')} title="Copy (X=..., Y=..., Z=...)" style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '2px' }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              </button>
+              <button onClick={() => handlePasteClick('scale')} title="Paste (X=..., Y=..., Z=...)" style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', padding: '2px' }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+              </button>
+            </div>
+          </div>
           <div className="position-xyz-row">
             {([['X', sx, setSX], ['Y', sy, setSY], ['Z', sz, setSZ]] as const).map(([axis, val, setter]) => (
               <div key={axis} className="position-xyz-field">
                 <span className="position-axis-label">{axis}</span>
-                <input className="position-input" type="number" step="0.1" value={val} onChange={e => setter(e.target.value)} onKeyDown={handleKeyDown} disabled={!activeModelId} />
+                <input className="position-input" type="number" step="0.1" value={val} onChange={e => setter(e.target.value)} onKeyDown={handleKeyDown} onPaste={e => handlePasteInput(e, 'scale')} disabled={!activeModelId} />
               </div>
             ))}
           </div>

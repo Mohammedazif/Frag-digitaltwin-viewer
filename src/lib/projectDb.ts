@@ -64,7 +64,6 @@ export async function writeJson(dir: FileSystemDirectoryHandle, filename: string
     } catch (err: any) {
       lastErr = err;
       if (err?.message?.includes('state cached in an interface object')) {
-        // Wait 250ms and retry, the file might be temporarily scanned/locked by UE/AV
         await new Promise(r => setTimeout(r, 250));
         continue;
       }
@@ -96,7 +95,6 @@ export async function writeBinary(dir: FileSystemDirectoryHandle, filename: stri
     } catch (err: any) {
       lastErr = err;
       if (err?.message?.includes('state cached in an interface object')) {
-        // Wait 250ms and retry in case of external watcher lock
         await new Promise(r => setTimeout(r, 250));
         continue;
       }

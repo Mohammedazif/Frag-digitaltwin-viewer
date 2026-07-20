@@ -83,6 +83,9 @@ export interface ProjectRenderSettings {
   godRayStrength?: number
   chromaticAberration?: number
   autoFocus?: boolean
+  ambientOcclusion?: boolean
+  outlineEdges?: boolean
+  pbrMaterials?: boolean
 }
 
 export interface ProjectMeta {

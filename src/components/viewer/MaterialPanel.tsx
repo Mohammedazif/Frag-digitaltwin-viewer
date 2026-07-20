@@ -20,6 +20,9 @@ export function MaterialPanel({ engineRef }: MaterialPanelProps) {
   const removeMaterialOverride = useProjectStore(s => s.removeMaterialOverride)
   const models = useModelStore(s => s.models)
 
+  const copiedMaterial = useAppStore(s => s.copiedMaterial)
+  const setCopiedMaterial = useAppStore(s => s.setCopiedMaterial)
+
   const [targetType, setTargetType] = useState<'item' | 'category'>('item')
   const [materialMode, setMaterialMode] = useState<'color' | 'texture'>('color')
   
@@ -288,6 +291,38 @@ export function MaterialPanel({ engineRef }: MaterialPanelProps) {
             )}
 
             <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+              <button className="position-apply-btn" onClick={() => {
+                const matData = { materialMode, color, opacity, transparent, roughness, metalness, textureDataUrl, textureScale };
+                setCopiedMaterial(matData);
+              }} style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border-soft)', color: 'var(--text)' }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" style={{ marginRight: '4px', verticalAlign: 'text-bottom' }}>
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                Copy
+              </button>
+              <button className="position-apply-btn" onClick={() => {
+                if (copiedMaterial) {
+                  const p = copiedMaterial;
+                  if (p.materialMode) setMaterialMode(p.materialMode);
+                  if (p.color) setColor(p.color);
+                  if (p.opacity) setOpacity(p.opacity);
+                  if (p.transparent !== undefined) setTransparent(p.transparent);
+                  if (p.roughness) setRoughness(p.roughness);
+                  if (p.metalness) setMetalness(p.metalness);
+                  if (p.textureDataUrl !== undefined) setTextureDataUrl(p.textureDataUrl);
+                  if (p.textureScale) setTextureScale(p.textureScale);
+                }
+              }} style={{ flex: 1, background: 'var(--bg)', border: '1px solid var(--border-soft)', color: 'var(--text)' }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" style={{ marginRight: '4px', verticalAlign: 'text-bottom' }}>
+                  <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                  <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+                </svg>
+                Paste
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
               <button className="position-apply-btn" onClick={handleApply} style={{ flex: 2 }}>
                 Apply Material
               </button>

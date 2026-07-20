@@ -93,6 +93,11 @@ export function ProjectListPage({ engineRef }: ProjectListPageProps) {
       setLightingParams(meta.renderSettings)
     }
 
+    // Reset UI panels when loading a new project
+    useAppStore.getState().setMaterialPickerActive(false)
+    useAppStore.getState().setSelectedMaterialElement(null)
+    useModelStore.getState().setActiveModelId(null)
+
     // Set viewing step first so RenderPanel and others mount if needed
     setStep('viewing')
 

@@ -152,6 +152,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       await saveProjectMeta(folderHandle, updated)
       await cacheHandle(updated.projectId, folderHandle, updated, (updated as any).thumbnail)
     } catch (err: any) {
+      console.error("Save Error Details:", err);
       if (err?.message?.includes('state cached in an interface object')) {
         alert("The project files were modified externally. Please close and re-open the project folder.");
       } else {
@@ -228,6 +229,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       await saveProjectMeta(folderHandle, updated)
       await cacheHandle(updated.projectId, folderHandle, updated, (updated as any).thumbnail)
     } catch (err: any) {
+      console.error("Save Error Details:", err);
       if (err?.message?.includes('state cached in an interface object')) {
         alert("The project files were modified externally. Please close and re-open the project folder.");
       } else {
@@ -258,6 +260,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       await deleteModelFromProject(folderHandle, modelId)
       await saveProjectMeta(folderHandle, updated)
     } catch (err: any) {
+      console.error("Save Error Details:", err);
       if (err?.message?.includes('state cached in an interface object')) {
         alert("The project files were modified externally. Please close and re-open the project folder.");
       } else {
@@ -294,6 +297,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       await saveProjectMeta(folderHandle, updated)
       await cacheHandle(updated.projectId, folderHandle, updated, (updated as any).thumbnail)
     } catch (err: any) {
+      console.error("Save Error Details:", err);
       if (err?.message?.includes('state cached in an interface object')) {
         alert("The project files were modified externally. Please close and re-open the project folder.");
       } else {
@@ -324,6 +328,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     try {
       await saveProjectMeta(folderHandle, updated)
     } catch (err: any) {
+      console.error("Save Error Details:", err);
       if (err?.message?.includes('state cached in an interface object')) {
         alert("The project files were modified externally. Please close and re-open the project folder.");
       } else {
@@ -354,10 +359,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     try {
       await saveProjectMeta(folderHandle, updated)
     } catch (err: any) {
+      console.error("Save Error Details:", err);
       if (err?.message?.includes('state cached in an interface object')) {
         alert("The project files were modified by another program (e.g., Unreal Engine). Please close and re-open the project folder to save your changes.");
       } else {
-        console.error(err);
         alert("Failed to save changes: " + err?.message);
       }
       return;
@@ -385,10 +390,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     try {
       await saveProjectMeta(folderHandle, updated)
     } catch (err: any) {
+      console.error("Save Error Details:", err);
       if (err?.message?.includes('state cached in an interface object')) {
         alert("The project files were modified by another program (e.g., Unreal Engine). Please close and re-open the project folder to save your changes.");
       } else {
-        console.error(err);
         alert("Failed to save changes: " + err?.message);
       }
       return;
