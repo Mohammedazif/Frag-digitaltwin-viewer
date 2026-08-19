@@ -65,23 +65,29 @@ export function OrientationCube({ engineRef, dashboardVisible }: OrientationCube
   const snapTo = useCallback((posOffset: number[], _tgt: number[]) => {
     const engine = engineRef.current
     if (!engine?.world?.camera?.controls) return
-    const box = new THREE.Box3()
-    if (engine.fragments?.models?.list) {
-      for (const model of engine.fragments.models.list.values()) {
-        const obj = (model as any).object || (model as any)
-        if (obj && typeof obj.updateWorldMatrix === 'function') box.expandByObject(obj)
-      }
+    const controls = engine.world.camera.controls as any
+    
+    // Get current target and camera position
+    const currentTarget = new THREE.Vector3()
+    const currentPos = new THREE.Vector3()
+    if (typeof controls.getTarget === 'function') {
+      controls.getTarget(currentTarget)
+      controls.getPosition(currentPos)
+    } else {
+      return
     }
-    const size = new THREE.Vector3()
-    box.getSize(size)
-    const scale = box.isEmpty() ? 30 : Math.max(size.x, size.y, size.z) * 0.7
-    const center = box.isEmpty() ? new THREE.Vector3() : box.getCenter(new THREE.Vector3())
-    const f = scale / D
-    engine.world.camera.controls.setLookAt(
-      center.x + posOffset[0] * f,
-      center.y + posOffset[1] * f,
-      center.z + posOffset[2] * f,
-      center.x, center.y, center.z,
+
+    // Maintain current zoom distance, just change the angle
+    const distance = currentPos.distanceTo(currentTarget)
+    // Normalize the preset offset to get direction
+    const dir = new THREE.Vector3(posOffset[0], posOffset[1], posOffset[2]).normalize()
+    
+    // Calculate new position
+    const newPos = currentTarget.clone().add(dir.multiplyScalar(distance))
+    
+    controls.setLookAt(
+      newPos.x, newPos.y, newPos.z,
+      currentTarget.x, currentTarget.y, currentTarget.z,
       true
     )
   }, [engineRef])

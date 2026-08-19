@@ -920,7 +920,7 @@ export async function initFragmentsEngine(
     if (progressiveRestoreTimer) { clearTimeout(progressiveRestoreTimer); progressiveRestoreTimer = null }
     if (ssaoPass && ssaoPass.enabled) { savedAoEnabled = true; ssaoPass.enabled = false; renderPass.enabled = true }
     if (edgePass && edgePass.enabled) { savedEdgeEnabled = true; edgePass.enabled = false }
-    world.renderer.three.shadowMap.autoUpdate = false
+    // Removed shadowMap.autoUpdate = false so shadows don't flicker/vanish during movement
   })
 
   world.camera.controls.addEventListener('controlend', () => {
@@ -930,10 +930,8 @@ export async function initFragmentsEngine(
     progressiveRestoreTimer = setTimeout(() => {
       if (savedAoEnabled && ssaoPass) { ssaoPass.enabled = true; renderPass.enabled = false }
       if (savedEdgeEnabled && edgePass) { edgePass.enabled = true }
-      world.renderer.three.shadowMap.autoUpdate = true
-      world.renderer.three.shadowMap.needsUpdate = true
       progressiveRestoreTimer = null
-    }, 150)
+    }, 400) // Increased from 150ms to 400ms to avoid rapid flickering on small adjustments
   })
 
   fragments.models.materials.list.onItemSet.add(({ value: material }: any) => {
