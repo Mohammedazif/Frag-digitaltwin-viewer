@@ -62,8 +62,8 @@ export function MapView({ meta, folderHandle, adminMode, onOpenLocation, onExit 
     setTransitioning(true)
     setTimeout(() => {
       action()
-      setTimeout(() => setTransitioning(false), 100)
-    }, 250)
+      setTimeout(() => setTransitioning(false), 50)
+    }, 150)
   }, [])
 
   const handleSelect = useCallback((location: MapLocation) => {
@@ -173,7 +173,7 @@ export function MapView({ meta, folderHandle, adminMode, onOpenLocation, onExit 
           inset: 0,
           backgroundColor: '#0d1320', // Matches the map's void color for a seamless fade
           zIndex: 4, // Below the UI controls (z-index 10) but above the canvas
-          transition: 'opacity 0.25s ease-in-out',
+          transition: 'opacity 0.15s ease-in-out',
           opacity: transitioning ? 1 : 0,
           pointerEvents: 'none'
         }}
