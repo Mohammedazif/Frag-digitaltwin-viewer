@@ -194,6 +194,7 @@ export function RenderPanel() {
   const [open, setOpen] = useState(false)
   // Tracks which preset button is currently active (null = no preset / custom)
   const [activePreset, setActivePreset] = useState<string | null>(null)
+  const [activeCustomId, setActiveCustomId] = useState<string | null>(null)
 
   const formatTime = (time: number) => {
     const hours   = Math.floor(time)
@@ -284,20 +285,34 @@ export function RenderPanel() {
               />
               {s.gradientSkyEnabled !== false && (
                 <>
-                  <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                    {/* Built-in and Custom Presets */}
-                    {(() => {
-                      const customPresetsRaw = localStorage.getItem('eko_custom_gradients')
-                      const customPresets: { id: string; label: string; top: string; bottom: string }[] = 
-                        customPresetsRaw ? JSON.parse(customPresetsRaw) : []
+                  {/* Built-in and Custom Presets */}
+                  {(() => {
+                    const customPresetsRaw = localStorage.getItem('eko_custom_gradients')
+                    const customPresets: { id: string; label: string; top: string; bottom: string }[] = 
+                      customPresetsRaw ? JSON.parse(customPresetsRaw) : []
 
-                      const allPresets = [...GRADIENT_PRESETS.map(p => ({ ...p, isCustom: false, id: p.label })), ...customPresets.map(p => ({ ...p, isCustom: true }))]
-                      const isAnyPresetActive = allPresets.some(p => p.top === s.gradientSkyTop && p.bottom === s.gradientSkyBottom)
+                    const allPresets = [...GRADIENT_PRESETS.map(p => ({ ...p, isCustom: false, id: p.label })), ...customPresets.map(p => ({ ...p, isCustom: true }))]
+                    
+                    // A preset is considered visually active if it matches the current colors.
+                    const isAnyPresetVisuallyActive = allPresets.some(p => p.top === s.gradientSkyTop && p.bottom === s.gradientSkyBottom)
+                    
+                    // The explicitly active custom preset we are editing.
+                    // Fall back to a visual match if activeCustomId isn't set but we are matching a custom preset perfectly.
+                    let activeCustomPreset = customPresets.find(p => p.id === activeCustomId)
+                    if (!activeCustomPreset && isAnyPresetVisuallyActive) {
+                      const visualMatch = allPresets.find(p => p.top === s.gradientSkyTop && p.bottom === s.gradientSkyBottom)
+                      if (visualMatch?.isCustom) {
+                        activeCustomPreset = customPresets.find(p => p.id === visualMatch.id)
+                      }
+                    }
 
-                      return (
-                        <>
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                           {allPresets.map(p => {
+                            // Visually highlight it if the colors match exactly
                             const isActive = s.gradientSkyTop === p.top && s.gradientSkyBottom === p.bottom
+                            
                             return (
                               <div
                                 key={p.id}
@@ -305,13 +320,21 @@ export function RenderPanel() {
                               >
                                 <button
                                   title={p.label}
-                                  onClick={() => setLightingParams({ gradientSkyTop: p.top, gradientSkyBottom: p.bottom })}
+                                  onClick={() => {
+                                    setLightingParams({ gradientSkyTop: p.top, gradientSkyBottom: p.bottom })
+                                    if (p.isCustom) {
+                                      setActiveCustomId(p.id)
+                                    } else {
+                                      setActiveCustomId(null)
+                                    }
+                                  }}
                                   onContextMenu={e => {
                                     if (p.isCustom) {
                                       e.preventDefault()
                                       if (window.confirm(`Delete custom preset "${p.label}"?`)) {
                                         const newPresets = customPresets.filter(cp => cp.id !== p.id)
                                         localStorage.setItem('eko_custom_gradients', JSON.stringify(newPresets))
+                                        if (activeCustomId === p.id) setActiveCustomId(null)
                                         setLightingParams({ ...s }) // force render
                                       }
                                     }
@@ -344,17 +367,21 @@ export function RenderPanel() {
                             <button
                               title="Create New Custom Preset"
                               onClick={() => {
-                                const name = window.prompt('Name for new custom preset:', `Custom ${customPresets.length + 1}`)
-                                if (name) {
-                                  const newPreset = { 
-                                    id: 'custom_' + Date.now(), 
-                                    label: name, 
-                                    top: s.gradientSkyTop ?? '#a4b5c4', 
-                                    bottom: s.gradientSkyBottom ?? '#e2ded2' 
-                                  }
-                                  localStorage.setItem('eko_custom_gradients', JSON.stringify([...customPresets, newPreset]))
-                                  setLightingParams({ gradientSkyTop: newPreset.top, gradientSkyBottom: newPreset.bottom })
+                                // Slightly offset the default colors so it's visually unique right away
+                                const uniqueOffset = (customPresets.length * 5) % 50
+                                const defaultTop = s.gradientSkyTop ?? '#a4b5c4'
+                                const defaultBottom = s.gradientSkyBottom ?? '#e2ded2'
+                                
+                                const newId = 'custom_' + Date.now()
+                                const newPreset = { 
+                                  id: newId, 
+                                  label: `Custom ${customPresets.length + 1}`, 
+                                  top: defaultTop, 
+                                  bottom: defaultBottom
                                 }
+                                localStorage.setItem('eko_custom_gradients', JSON.stringify([...customPresets, newPreset]))
+                                setLightingParams({ gradientSkyTop: newPreset.top, gradientSkyBottom: newPreset.bottom })
+                                setActiveCustomId(newId)
                               }}
                               style={{
                                 width: '34px', height: '48px', borderRadius: '6px', cursor: 'pointer', padding: 0,
@@ -377,35 +404,53 @@ export function RenderPanel() {
                               New
                             </span>
                           </div>
+                        </div>
 
-                          {/* Only show color pickers if a Custom Preset or Unsaved Custom is active */}
-                          {!isAnyPresetActive || allPresets.find(p => p.top === s.gradientSkyTop && p.bottom === s.gradientSkyBottom)?.isCustom ? (
-                            <div style={{ display: 'flex', gap: '8px', marginTop: '4px', width: '100%' }}>
+                        {/* Custom Gradient Editor Controls */}
+                        {(!isAnyPresetVisuallyActive || activeCustomPreset) && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px', background: 'var(--bg-elevated)', borderRadius: '6px', border: '1px solid var(--border)' }}>
+                            {activeCustomPreset && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <label style={{ fontSize: '10px', color: 'var(--text-secondary)', width: '45px' }}>Name:</label>
+                                <input 
+                                  type="text" 
+                                  value={activeCustomPreset.label}
+                                  onChange={e => {
+                                    const newPresets = customPresets.map(p => p.id === activeCustomPreset!.id ? { ...p, label: e.target.value } : p)
+                                    localStorage.setItem('eko_custom_gradients', JSON.stringify(newPresets))
+                                    setLightingParams({ ...s }) // force render
+                                  }}
+                                  style={{
+                                    flex: 1, background: 'var(--bg-surface)', border: '1px solid var(--border)', 
+                                    color: 'var(--text-primary)', fontSize: '11px', padding: '4px 6px', borderRadius: '4px'
+                                  }}
+                                />
+                              </div>
+                            )}
+                            
+                            <div style={{ display: 'flex', gap: '8px' }}>
                               <ColorField label="Top" value={s.gradientSkyTop ?? '#a4b5c4'}
                                 onChange={v => {
-                                  // If a custom preset is currently active, update it
-                                  const activePreset = allPresets.find(p => p.top === s.gradientSkyTop && p.bottom === s.gradientSkyBottom)
-                                  if (activePreset && activePreset.isCustom) {
-                                    const newPresets = customPresets.map(p => p.id === activePreset.id ? { ...p, top: v } : p)
+                                  if (activeCustomPreset) {
+                                    const newPresets = customPresets.map(p => p.id === activeCustomPreset!.id ? { ...p, top: v } : p)
                                     localStorage.setItem('eko_custom_gradients', JSON.stringify(newPresets))
                                   }
                                   setLightingParams({ gradientSkyTop: v })
                                 }} />
                               <ColorField label="Bottom" value={s.gradientSkyBottom ?? '#e2ded2'}
                                 onChange={v => {
-                                  const activePreset = allPresets.find(p => p.top === s.gradientSkyTop && p.bottom === s.gradientSkyBottom)
-                                  if (activePreset && activePreset.isCustom) {
-                                    const newPresets = customPresets.map(p => p.id === activePreset.id ? { ...p, bottom: v } : p)
+                                  if (activeCustomPreset) {
+                                    const newPresets = customPresets.map(p => p.id === activeCustomPreset!.id ? { ...p, bottom: v } : p)
                                     localStorage.setItem('eko_custom_gradients', JSON.stringify(newPresets))
                                   }
                                   setLightingParams({ gradientSkyBottom: v })
                                 }} />
                             </div>
-                          ) : null}
-                        </>
-                      )
-                    })()}
-                  </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
                 </>
               )}
             </div>
