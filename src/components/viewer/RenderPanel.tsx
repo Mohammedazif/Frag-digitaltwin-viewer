@@ -285,87 +285,127 @@ export function RenderPanel() {
               {s.gradientSkyEnabled !== false && (
                 <>
                   <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                    {GRADIENT_PRESETS.map(p => {
-                      const isActive = s.gradientSkyTop === p.top && s.gradientSkyBottom === p.bottom
-                      return (
-                        <div
-                          key={p.label}
-                          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}
-                        >
-                          <button
-                            title={p.label}
-                            onClick={() => setLightingParams({ gradientSkyTop: p.top, gradientSkyBottom: p.bottom })}
-                            style={{
-                              width: '34px', height: '48px', borderRadius: '6px', cursor: 'pointer', padding: 0,
-                              border: `2px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
-                              background: `linear-gradient(to bottom, ${p.top}, ${p.bottom})`,
-                              flexShrink: 0,
-                              boxShadow: isActive ? '0 0 0 2px rgba(var(--accent-rgb,22,101,52),0.25)' : 'none',
-                              transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
-                            }}
-                          />
-                          <span style={{
-                            fontSize: '7px', color: 'var(--text-secondary)', textAlign: 'center',
-                            width: '38px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                            fontWeight: isActive ? 700 : 400,
-                          }}>
-                            {p.label}
-                          </span>
-                        </div>
-                      )
-                    })}
-
-                    {/* Custom Gradient Button */}
+                    {/* Built-in and Custom Presets */}
                     {(() => {
-                      const customTop = localStorage.getItem('eko_custom_gradient_top') ?? '#a4b5c4'
-                      const customBottom = localStorage.getItem('eko_custom_gradient_bottom') ?? '#e2ded2'
-                      
-                      const isCustomActive = !GRADIENT_PRESETS.some(p => p.top === s.gradientSkyTop && p.bottom === s.gradientSkyBottom)
-                      
+                      const customPresetsRaw = localStorage.getItem('eko_custom_gradients')
+                      const customPresets: { id: string; label: string; top: string; bottom: string }[] = 
+                        customPresetsRaw ? JSON.parse(customPresetsRaw) : []
+
+                      const allPresets = [...GRADIENT_PRESETS.map(p => ({ ...p, isCustom: false, id: p.label })), ...customPresets.map(p => ({ ...p, isCustom: true }))]
+                      const isAnyPresetActive = allPresets.some(p => p.top === s.gradientSkyTop && p.bottom === s.gradientSkyBottom)
+
                       return (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-                          <button
-                            title="Custom"
-                            onClick={() => setLightingParams({ gradientSkyTop: customTop, gradientSkyBottom: customBottom })}
-                            style={{
-                              width: '34px', height: '48px', borderRadius: '6px', cursor: 'pointer', padding: 0,
-                              border: `2px solid ${isCustomActive ? 'var(--accent)' : 'var(--border)'}`,
-                              background: `linear-gradient(to bottom, ${s.gradientSkyTop ?? customTop}, ${s.gradientSkyBottom ?? customBottom})`,
-                              flexShrink: 0,
-                              boxShadow: isCustomActive ? '0 0 0 2px rgba(var(--accent-rgb,22,101,52),0.25)' : 'none',
-                              transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center'
-                            }}
-                          >
-                            <span style={{ fontSize: '18px', color: 'rgba(255,255,255,0.8)', textShadow: '0 1px 2px rgba(0,0,0,0.4)' }}>+</span>
-                          </button>
-                          <span style={{
-                            fontSize: '7px', color: 'var(--text-secondary)', textAlign: 'center',
-                            width: '38px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                            fontWeight: isCustomActive ? 700 : 400,
-                          }}>
-                            Custom
-                          </span>
-                        </div>
+                        <>
+                          {allPresets.map(p => {
+                            const isActive = s.gradientSkyTop === p.top && s.gradientSkyBottom === p.bottom
+                            return (
+                              <div
+                                key={p.id}
+                                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', position: 'relative' }}
+                              >
+                                <button
+                                  title={p.label}
+                                  onClick={() => setLightingParams({ gradientSkyTop: p.top, gradientSkyBottom: p.bottom })}
+                                  onContextMenu={e => {
+                                    if (p.isCustom) {
+                                      e.preventDefault()
+                                      if (window.confirm(`Delete custom preset "${p.label}"?`)) {
+                                        const newPresets = customPresets.filter(cp => cp.id !== p.id)
+                                        localStorage.setItem('eko_custom_gradients', JSON.stringify(newPresets))
+                                        setLightingParams({ ...s }) // force render
+                                      }
+                                    }
+                                  }}
+                                  style={{
+                                    width: '34px', height: '48px', borderRadius: '6px', cursor: 'pointer', padding: 0,
+                                    border: `2px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
+                                    background: `linear-gradient(to bottom, ${p.top}, ${p.bottom})`,
+                                    flexShrink: 0,
+                                    boxShadow: isActive ? '0 0 0 2px rgba(var(--accent-rgb,22,101,52),0.25)' : 'none',
+                                    transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+                                  }}
+                                />
+                                <span 
+                                  title={p.isCustom ? "Right-click to delete. Click to apply." : undefined}
+                                  style={{
+                                    fontSize: '7px', color: p.isCustom ? 'var(--accent)' : 'var(--text-secondary)', textAlign: 'center',
+                                    width: '38px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                    fontWeight: isActive ? 700 : 400,
+                                  }}
+                                >
+                                  {p.label}
+                                </span>
+                              </div>
+                            )
+                          })}
+                          
+                          {/* Create New Custom Preset Button */}
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                            <button
+                              title="Create New Custom Preset"
+                              onClick={() => {
+                                const name = window.prompt('Name for new custom preset:', `Custom ${customPresets.length + 1}`)
+                                if (name) {
+                                  const newPreset = { 
+                                    id: 'custom_' + Date.now(), 
+                                    label: name, 
+                                    top: s.gradientSkyTop ?? '#a4b5c4', 
+                                    bottom: s.gradientSkyBottom ?? '#e2ded2' 
+                                  }
+                                  localStorage.setItem('eko_custom_gradients', JSON.stringify([...customPresets, newPreset]))
+                                  setLightingParams({ gradientSkyTop: newPreset.top, gradientSkyBottom: newPreset.bottom })
+                                }
+                              }}
+                              style={{
+                                width: '34px', height: '48px', borderRadius: '6px', cursor: 'pointer', padding: 0,
+                                border: `2px dashed var(--border)`,
+                                background: 'transparent',
+                                flexShrink: 0,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                transition: 'border-color 0.15s ease, opacity 0.15s ease',
+                                opacity: 0.6
+                              }}
+                              onMouseOver={e => e.currentTarget.style.opacity = '1'}
+                              onMouseOut={e => e.currentTarget.style.opacity = '0.6'}
+                            >
+                              <span style={{ fontSize: '16px', color: 'var(--text-secondary)' }}>+</span>
+                            </button>
+                            <span style={{
+                              fontSize: '7px', color: 'var(--text-secondary)', textAlign: 'center',
+                              width: '38px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            }}>
+                              New
+                            </span>
+                          </div>
+
+                          {/* Only show color pickers if a Custom Preset or Unsaved Custom is active */}
+                          {!isAnyPresetActive || allPresets.find(p => p.top === s.gradientSkyTop && p.bottom === s.gradientSkyBottom)?.isCustom ? (
+                            <div style={{ display: 'flex', gap: '8px', marginTop: '4px', width: '100%' }}>
+                              <ColorField label="Top" value={s.gradientSkyTop ?? '#a4b5c4'}
+                                onChange={v => {
+                                  // If a custom preset is currently active, update it
+                                  const activePreset = allPresets.find(p => p.top === s.gradientSkyTop && p.bottom === s.gradientSkyBottom)
+                                  if (activePreset && activePreset.isCustom) {
+                                    const newPresets = customPresets.map(p => p.id === activePreset.id ? { ...p, top: v } : p)
+                                    localStorage.setItem('eko_custom_gradients', JSON.stringify(newPresets))
+                                  }
+                                  setLightingParams({ gradientSkyTop: v })
+                                }} />
+                              <ColorField label="Bottom" value={s.gradientSkyBottom ?? '#e2ded2'}
+                                onChange={v => {
+                                  const activePreset = allPresets.find(p => p.top === s.gradientSkyTop && p.bottom === s.gradientSkyBottom)
+                                  if (activePreset && activePreset.isCustom) {
+                                    const newPresets = customPresets.map(p => p.id === activePreset.id ? { ...p, bottom: v } : p)
+                                    localStorage.setItem('eko_custom_gradients', JSON.stringify(newPresets))
+                                  }
+                                  setLightingParams({ gradientSkyBottom: v })
+                                }} />
+                            </div>
+                          ) : null}
+                        </>
                       )
                     })()}
                   </div>
-                  
-                  {/* Only show color pickers if Custom is active */}
-                  {!GRADIENT_PRESETS.some(p => p.top === s.gradientSkyTop && p.bottom === s.gradientSkyBottom) && (
-                    <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                      <ColorField label="Top" value={s.gradientSkyTop ?? '#a4b5c4'}
-                        onChange={v => {
-                          localStorage.setItem('eko_custom_gradient_top', v)
-                          setLightingParams({ gradientSkyTop: v })
-                        }} />
-                      <ColorField label="Bottom" value={s.gradientSkyBottom ?? '#e2ded2'}
-                        onChange={v => {
-                          localStorage.setItem('eko_custom_gradient_bottom', v)
-                          setLightingParams({ gradientSkyBottom: v })
-                        }} />
-                    </div>
-                  )}
                 </>
               )}
             </div>
