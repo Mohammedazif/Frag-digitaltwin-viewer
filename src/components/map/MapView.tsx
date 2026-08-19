@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import '@/styles/map.css'
 import { useMapEngine } from '@/hooks/useMapEngine'
@@ -56,19 +56,33 @@ export function MapView({ meta, folderHandle, adminMode, onOpenLocation, onExit 
     [config, levelId, resolveAsset]
   )
 
+  const [transitioning, setTransitioning] = useState(false)
+
+  const withTransition = useCallback((action: () => void) => {
+    setTransitioning(true)
+    setTimeout(() => {
+      action()
+      setTimeout(() => setTransitioning(false), 100)
+    }, 250)
+  }, [])
+
   const handleSelect = useCallback((location: MapLocation) => {
     select(location.id)
   }, [select])
 
   const handleEnter = useCallback((location: MapLocation) => {
-    if (hasChildren(locations, location.id)) enterLevel(location.id)
-  }, [locations, enterLevel])
+    if (hasChildren(locations, location.id)) {
+      withTransition(() => enterLevel(location.id))
+    }
+  }, [locations, enterLevel, withTransition])
 
   /** Models win the double click; a pin with none falls back to going in, so it always does something */
   const handleOpen = useCallback((location: MapLocation) => {
     if (liveModelIds(meta, location).length) onOpenLocation(location)
-    else if (hasChildren(locations, location.id)) enterLevel(location.id)
-  }, [locations, meta, enterLevel, onOpenLocation])
+    else if (hasChildren(locations, location.id)) {
+      withTransition(() => enterLevel(location.id))
+    }
+  }, [locations, meta, enterLevel, onOpenLocation, withTransition])
 
   const handleMapClick = useCallback((lngLat: [number, number]) => {
     if (editTool === 'pin') {
@@ -151,6 +165,19 @@ export function MapView({ meta, folderHandle, adminMode, onOpenLocation, onExit 
       aria-label="Project location map"
     >
       <div ref={containerRef} className="map-canvas" />
+      
+      <div 
+        className="map-transition-overlay"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundColor: '#0d1320', // Matches the map's void color for a seamless fade
+          zIndex: 4, // Below the UI controls (z-index 10) but above the canvas
+          transition: 'opacity 0.25s ease-in-out',
+          opacity: transitioning ? 1 : 0,
+          pointerEvents: 'none'
+        }}
+      />
 
       <header className="map-topbar">
         <MapBreadcrumb projectName={meta.name} trail={trail} onGoTo={handleGoTo} />
