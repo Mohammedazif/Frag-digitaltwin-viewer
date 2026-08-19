@@ -57,7 +57,7 @@ export async function initFragmentsEngine(
   world.scene.setup()
   world.scene.three.background = null
 
-  world.renderer = new OBC.SimpleRenderer(components, container, { preserveDrawingBuffer: true, antialias: true })
+  world.renderer = new OBC.SimpleRenderer(components, container, { preserveDrawingBuffer: true, antialias: true, logarithmicDepthBuffer: true })
   
   // Prepare Environment
   const pmremGenerator = new THREE.PMREMGenerator(world.renderer.three)
@@ -650,7 +650,7 @@ export async function initFragmentsEngine(
   world.camera = new OBC.SimpleCamera(components)
 
   if (world.camera.three instanceof THREE.PerspectiveCamera || world.camera.three instanceof THREE.OrthographicCamera) {
-    world.camera.three.near = 10
+    world.camera.three.near = 0.1
     world.camera.three.far = 200000
     world.camera.three.updateProjectionMatrix()
   }
