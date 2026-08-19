@@ -650,7 +650,7 @@ export async function initFragmentsEngine(
   world.camera = new OBC.SimpleCamera(components)
 
   if (world.camera.three instanceof THREE.PerspectiveCamera || world.camera.three instanceof THREE.OrthographicCamera) {
-    world.camera.three.near = 0.1
+    world.camera.three.near = 10
     world.camera.three.far = 200000
     world.camera.three.updateProjectionMatrix()
   }

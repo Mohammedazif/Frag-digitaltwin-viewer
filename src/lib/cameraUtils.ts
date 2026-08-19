@@ -31,7 +31,7 @@ export function resetCameraToHome(engine: FragmentsEngine | null) {
   // 2. If no saved camera, calculate smart isometric overview
   const box = new THREE.Box3()
   engine.world.scene.three.traverse((obj: any) => {
-    if (obj.isMesh && obj.name !== 'SkyDome' && obj.name !== 'CloudsDome') {
+    if (obj.isMesh && obj.name !== 'SkyDome' && obj.name !== 'CloudsDome' && obj.name !== 'ShadowCatcherPlane') {
       box.expandByObject(obj)
     }
   })

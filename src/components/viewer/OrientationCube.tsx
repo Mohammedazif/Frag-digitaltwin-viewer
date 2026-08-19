@@ -67,7 +67,7 @@ export function OrientationCube({ engineRef, dashboardVisible }: OrientationCube
     if (!engine?.world?.camera?.controls) return
     const box = new THREE.Box3()
     engine.world.scene.three.traverse((obj: any) => {
-      if (obj.isMesh && obj.name !== 'SkyDome' && obj.name !== 'CloudsDome') {
+      if (obj.isMesh && obj.name !== 'SkyDome' && obj.name !== 'CloudsDome' && obj.name !== 'ShadowCatcherPlane') {
         box.expandByObject(obj)
       }
     })
