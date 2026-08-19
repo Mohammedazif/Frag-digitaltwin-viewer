@@ -2,11 +2,7 @@ import * as THREE from 'three'
 import type { FragmentsEngine } from './fragmentsEngine'
 import { useProjectStore } from '@/store/useProjectStore'
 
-/**
- * Universally unifies the "Home" and "Reset Camera" logic.
- * 1. Flies to the user's saved project camera if it exists.
- * 2. Defaults to a smart isometric overview calculated from the scene's bounding box.
- */
+
 export function resetCameraToHome(engine: FragmentsEngine | null) {
   if (!engine?.world?.camera?.controls) return
 

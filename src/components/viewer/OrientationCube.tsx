@@ -66,11 +66,12 @@ export function OrientationCube({ engineRef, dashboardVisible }: OrientationCube
     const engine = engineRef.current
     if (!engine?.world?.camera?.controls) return
     const box = new THREE.Box3()
-    engine.world.scene.three.traverse((obj: any) => {
-      if (obj.isMesh && obj.name !== 'SkyDome' && obj.name !== 'CloudsDome' && obj.name !== 'ShadowCatcherPlane') {
-        box.expandByObject(obj)
+    if (engine.fragments?.models?.list) {
+      for (const model of engine.fragments.models.list.values()) {
+        const obj = (model as any).object || (model as any)
+        if (obj && typeof obj.updateWorldMatrix === 'function') box.expandByObject(obj)
       }
-    })
+    }
     const size = new THREE.Vector3()
     box.getSize(size)
     const scale = box.isEmpty() ? 30 : Math.max(size.x, size.y, size.z) * 0.7
