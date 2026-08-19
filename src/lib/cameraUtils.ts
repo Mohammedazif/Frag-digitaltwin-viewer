@@ -3,12 +3,12 @@ import type { FragmentsEngine } from './fragmentsEngine'
 import { useProjectStore } from '@/store/useProjectStore'
 
 
-export function resetCameraToHome(engine: FragmentsEngine | null) {
+export function resetCameraToHome(engine: FragmentsEngine | null, ignoreProjectCamera = false) {
   if (!engine?.world?.camera?.controls) return
 
-  // 1. Try to use saved project camera first
+  // 1. Try to use saved project camera first (unless ignored, e.g., when clicking a map pin)
   const camera = useProjectStore.getState().currentProject?.camera
-  if (camera) {
+  if (!ignoreProjectCamera && camera) {
     const pos = camera.position as any
     const tgt = camera.target as any
     
@@ -26,11 +26,22 @@ export function resetCameraToHome(engine: FragmentsEngine | null) {
 
   // 2. If no saved camera, calculate smart isometric overview
   const box = new THREE.Box3()
-  engine.world.scene.three.traverse((obj: any) => {
-    if (obj.isMesh && obj.name !== 'SkyDome' && obj.name !== 'CloudsDome' && obj.name !== 'ShadowCatcherPlane') {
-      box.expandByObject(obj)
+  if (engine.fragments?.models?.list) {
+    for (const [, model] of engine.fragments.models.list as any) {
+      const m = model as any
+      if (m.boundingBox) {
+        box.expandByPoint(m.boundingBox.min)
+        box.expandByPoint(m.boundingBox.max)
+      } else if (typeof m.traverse === 'function') {
+        m.traverse((obj: any) => {
+          if (obj.isMesh && typeof obj.updateWorldMatrix === 'function') {
+            obj.updateWorldMatrix(true, false)
+            box.expandByObject(obj)
+          }
+        })
+      }
     }
-  })
+  }
   
   const size = new THREE.Vector3()
   box.getSize(size)
