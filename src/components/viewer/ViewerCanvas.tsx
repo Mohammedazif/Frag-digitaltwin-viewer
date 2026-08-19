@@ -114,9 +114,32 @@ export function ViewerCanvas({ onEngineReady, adminMode = true, isFinProject = f
         }
         for (;;) {
           // Re-read the store each pass so models added mid-load are picked up
-          const next = useModelStore.getState().models.find(
-            m => m.fragBytes && !loadedIdsRef.current.has(m.modelId)
-          )
+          const storeModels = useModelStore.getState().models
+          const progressState = useLoadingProgressStore.getState()
+          const loadOrder = progressState.order
+          
+          let next = undefined
+          if (loadOrder.length > 0) {
+            for (const expectedId of loadOrder) {
+              if (loadedIdsRef.current.has(expectedId)) continue
+              
+              if (progressState.entries[expectedId]?.phase === 'error') {
+                loadedIdsRef.current.add(expectedId)
+                continue
+              }
+              
+              const m = storeModels.find(m => m.modelId === expectedId)
+              if (m && m.fragBytes) {
+                next = m
+                break
+              }
+              // Still waiting for this specific model to finish downloading
+              break
+            }
+          } else {
+            next = storeModels.find(m => m.fragBytes && !loadedIdsRef.current.has(m.modelId))
+          }
+          
           if (!next) break
           loadedIdsRef.current.add(next.modelId)
           const hasCamera = !!useProjectStore.getState().currentProject?.camera
