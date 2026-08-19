@@ -76,9 +76,7 @@ const SKY_PRESETS: { label: string; params: Partial<RenderSettings> }[] = [
   },
 ]
 
-// ─── Gradient Sky Presets (matched to Autodesk Viewer light presets) ───────────
-// Autodesk's backgrounds are very muted — not vivid blue.
-// Source: APS Viewer LightPresets bgColorGradient values.
+// Gradient Sky Presets
 const GRADIENT_PRESETS: { label: string; top: string; bottom: string }[] = [
   // Crisp light bluish-white to warm ground of BIM 360 / ACC Viewer
   { label: 'BIM 360',     top: '#c8e2f3', bottom: '#c4b59c' },
@@ -291,7 +289,9 @@ export function RenderPanel() {
                     const customPresets: { id: string; label: string; top: string; bottom: string }[] = 
                       customPresetsRaw ? JSON.parse(customPresetsRaw) : []
 
-                    const allPresets = [...GRADIENT_PRESETS.map(p => ({ ...p, isCustom: false, id: p.label })), ...customPresets.map(p => ({ ...p, isCustom: true }))]
+                    // [HIDDEN] Commented out custom presets for now
+                    const allPresets = [...GRADIENT_PRESETS.map(p => ({ ...p, isCustom: false, id: p.label }))] 
+                    // ...customPresets.map(p => ({ ...p, isCustom: true }))
                     
                     // A preset is considered visually active if it matches the current colors.
                     const isAnyPresetVisuallyActive = allPresets.some(p => p.top === s.gradientSkyTop && p.bottom === s.gradientSkyBottom)
@@ -362,7 +362,7 @@ export function RenderPanel() {
                             )
                           })}
                           
-                          {/* Create New Custom Preset Button */}
+                          {/* [HIDDEN] Commented out Create New Custom Preset Button for now
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
                             <button
                               title="Create New Custom Preset"
@@ -404,9 +404,10 @@ export function RenderPanel() {
                               New
                             </span>
                           </div>
+                          */}
                         </div>
 
-                        {/* Custom Gradient Editor Controls */}
+                        {/* [HIDDEN] Custom Gradient Editor Controls 
                         {(!isAnyPresetVisuallyActive || activeCustomPreset) && (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px', background: 'var(--bg-elevated)', borderRadius: '6px', border: '1px solid var(--border)' }}>
                             {activeCustomPreset && (
@@ -448,6 +449,7 @@ export function RenderPanel() {
                             </div>
                           </div>
                         )}
+                        */}
                       </div>
                     )
                   })()}
