@@ -1,57 +1,17 @@
 import { useRef, useCallback, useState, useEffect } from 'react'
 import { ViewerCanvas } from '@/components/viewer/ViewerCanvas'
+import { MapLayer } from '@/components/map/MapLayer'
 import { useAppStore } from '@/store/useAppStore'
 import { useModelStore } from '@/store/useModelStore'
 import { loadProjectFromHandle, loadModelsFromProject } from '@/lib/projectDb'
+import { streamProjectModels } from '@/lib/projectLoad'
 import { useProjectStore } from '@/store/useProjectStore'
 import { useLoadingProgressStore } from '@/store/useLoadingProgressStore'
 import { SignInOverlay, checkSession } from '@/viewer/SignInOverlay'
 import type { FragmentsEngine } from '@/lib/fragmentsEngine'
-import type { LoadedModel, ProjectMeta } from '@/types'
+import type { ProjectMeta } from '@/types'
+import { hasMap } from '@/lib/mapConfig'
 
-// Bounds both the concurrent downloads and the model buffers held in memory
-const MODEL_FETCH_CONCURRENCY = 2
-
-async function readBodyWithProgress(
-  res: Response,
-  onBytes: (bytesRead: number, totalBytes: number) => void
-): Promise<ArrayBuffer> {
-  if (!res.body) return res.arrayBuffer()
-  const declaredLength = Number(res.headers.get('content-length'))
-  // A bogus header must not become a bogus allocation
-  const total = Number.isSafeInteger(declaredLength) && declaredLength > 0 ? declaredLength : 0
-  const reader = res.body.getReader()
-  // Anything content-length did not account for spills into chunks
-  const declared = total > 0 ? new Uint8Array(total) : null
-  const spill: Uint8Array[] = []
-  let filled = 0
-  let read = 0
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    if (declared && spill.length === 0 && filled + value.length <= total) {
-      declared.set(value, filled)
-      filled += value.length
-    } else {
-      spill.push(value)
-    }
-    read += value.length
-    onBytes(read, total)
-  }
-
-  if (declared && spill.length === 0) {
-    return read === total ? declared.buffer : declared.buffer.slice(0, read)
-  }
-
-  const out = new Uint8Array(read)
-  if (declared) out.set(declared.subarray(0, filled))
-  let offset = filled
-  for (const c of spill) {
-    out.set(c, offset)
-    offset += c.length
-  }
-  return out.buffer
-}
 
 export default function ViewerApp() {
   const engineRef = useRef<FragmentsEngine | null>(null)
@@ -230,70 +190,16 @@ export default function ViewerApp() {
         useProjectStore.setState({ currentProject: meta })
         applyRenderSettings(meta)
 
-        const { beginSession, updateEntry } = useLoadingProgressStore.getState()
-        beginSession(meta.models.filter(m => m.fragFile).map(m => ({
-          modelId: m.modelId,
-          name: m.originalFileName,
-          sizeBytes: m.convertedFileSizeBytes || m.originalFileSizeBytes || 0,
-        })), 'server')
-
-        // Load each model via HTTP (FastAPI serves /models/{filename})
-        const queued = meta.models.filter(m => m.fragFile)
-
-        const fetchModel = async (m: typeof queued[number]): Promise<LoadedModel | null> => {
-          try {
-            const readStart = performance.now()
-            updateEntry(m.modelId, { phase: 'reading' })
-            // Cacheable on purpose — model bytes never change for a given
-            // modelId, so revisits revalidate via ETag instead of re-downloading
-            const modelRes = await fetch(m.fragFile)
-            if (!modelRes.ok) {
-              console.warn(`Failed to fetch model ${m.fragFile}: ${modelRes.status}`)
-              updateEntry(m.modelId, { phase: 'error', error: `HTTP ${modelRes.status}` })
-              return null
-            }
-            const buffer = await readBodyWithProgress(modelRes, (bytesRead, totalBytes) => {
-              updateEntry(m.modelId, totalBytes ? { bytesRead, sizeBytes: totalBytes } : { bytesRead })
-            })
-            updateEntry(m.modelId, {
-              phase: 'pending',
-              readMs: performance.now() - readStart,
-              bytesRead: buffer.byteLength,
-              sizeBytes: buffer.byteLength,
-            })
-            return {
-              modelId: m.modelId,
-              originalFileName: m.originalFileName,
-              originalFileSizeBytes: m.originalFileSizeBytes,
-              convertedFileSizeBytes: buffer.byteLength,
-              conversionTimeMs: m.conversionTimeMs,
-              fragBytes: buffer,
-              type: m.type,
-              position: m.position,
-              rotation: m.rotation,
-              scale: m.scale,
-            }
-          } catch (modelErr: any) {
-            console.warn(`Could not load model ${m.fragFile}:`, modelErr)
-            updateEntry(m.modelId, { phase: 'error', error: modelErr?.message ?? 'fetch failed' })
-            return null
+        if (hasMap(meta)) {
+          // Project has a map — start there; models will load when user clicks a location
+          if (mounted) setStep('map')
+        } else {
+          // No map — stream all models immediately and go straight to the 3D viewer
+          await streamProjectModels(null, meta)
+          if (mounted) {
+            setStep('viewing')
+            applyCameraPosition(meta)
           }
-        }
-
-        // FragmentsModels anchors baseCoordinates on the first model to parse
-        for (let i = 0; i < queued.length; i += MODEL_FETCH_CONCURRENCY) {
-          const group = await Promise.all(
-            queued.slice(i, i + MODEL_FETCH_CONCURRENCY).map(fetchModel)
-          )
-          if (!mounted) return
-          for (const model of group) {
-            if (model) addModel(model)
-          }
-        }
-
-        if (mounted) {
-          setStep('viewing')
-          applyCameraPosition(meta)
         }
       } catch (e: any) {
         // Expected in dev server — silently ignore, show manual picker instead
@@ -308,6 +214,7 @@ export default function ViewerApp() {
   }, [addModel, setStep, applyRenderSettings, applyCameraPosition])
 
   const hasModels = models.length > 0
+  const step = useAppStore(s => s.step)
 
   return (
     <div className="app-layout">
@@ -316,6 +223,9 @@ export default function ViewerApp() {
         <main className="app-main">
           {/* adminMode=false hides RenderPanel + ModelPositionPanel */}
           <ViewerCanvas onEngineReady={handleEngineReady} adminMode={false} isFinProject={projectMeta?.isFinProject} />
+
+          {/* Map view — shown when project has mapConfig */}
+          <MapLayer adminMode={false} engineRef={engineRef} />
 
           {/* Open Project overlay — dev fallback only, never in the exported viewer */}
           {!standalone && !hasModels && !isLoading && (

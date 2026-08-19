@@ -43,8 +43,8 @@ export function MapLayer({ adminMode, engineRef }: MapLayerProps) {
 
   const openLocation = useCallback(async (location: MapLocation) => {
     const meta = useProjectStore.getState().currentProject
-    const handle = useProjectStore.getState().folderHandle
-    if (!meta || !handle) return
+    const handle = useProjectStore.getState().folderHandle ?? null
+    if (!meta) return
 
     const modelIds = liveModelIds(meta, location)
     if (!modelIds.length) return
