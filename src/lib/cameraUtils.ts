@@ -3,12 +3,12 @@ import type { FragmentsEngine } from './fragmentsEngine'
 import { useProjectStore } from '@/store/useProjectStore'
 
 
-export function resetCameraToHome(engine: FragmentsEngine | null, ignoreProjectCamera = false) {
+export function resetCameraToHome(engine: FragmentsEngine | null) {
   if (!engine?.world?.camera?.controls) return
 
-  // 1. Try to use saved project camera first (unless ignored, e.g., when clicking a map pin)
+  // 1. Try to use saved project camera first
   const camera = useProjectStore.getState().currentProject?.camera
-  if (!ignoreProjectCamera && camera) {
+  if (camera) {
     const pos = camera.position as any
     const tgt = camera.target as any
     
