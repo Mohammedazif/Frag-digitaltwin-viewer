@@ -7,7 +7,7 @@ import fs from 'fs'
 
 // wasm and the bundled render pyramid are studio-only; models/ and mapassets/ are project data
 // that both exporters write from the project folder, so anything under dist/ is a dev fixture.
-const EXPORT_SKIP = ['wasm/', 'map/', 'models/', 'mapassets/']
+const EXPORT_SKIP = ['wasm/', 'models/', 'mapassets/']
 const skipFromExport = (rel: string) => EXPORT_SKIP.some(prefix => rel.startsWith(prefix))
 
 function viewerAssetsPlugin() {

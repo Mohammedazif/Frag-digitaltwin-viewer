@@ -9,6 +9,7 @@ import { unloadAllModels } from '@/lib/sceneTeardown'
 import { liveModelIds } from '@/lib/mapConfig'
 import type { FragmentsEngine } from '@/lib/fragmentsEngine'
 import type { MapLocation } from '@/types'
+import { resetCameraToHome } from '@/lib/cameraUtils'
 
 const MapView = lazy(() =>
   import('@/components/map/MapView').then(m => ({ default: m.MapView }))
@@ -56,6 +57,7 @@ export function MapLayer({ adminMode, engineRef }: MapLayerProps) {
 
     try {
       await loadModelSet(engineRef.current, handle, meta, modelIds)
+      resetCameraToHome(engineRef.current, true)
     } finally {
       setPhase('idle')
     }
