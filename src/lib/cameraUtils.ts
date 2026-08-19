@@ -3,7 +3,7 @@ import type { FragmentsEngine } from './fragmentsEngine'
 import { useProjectStore } from '@/store/useProjectStore'
 
 
-export function resetCameraToHome(engine: FragmentsEngine | null) {
+export function resetCameraToHome(engine: FragmentsEngine | null, animate = true) {
   if (!engine?.world?.camera?.controls) return
 
   // 1. Try to use saved project camera first
@@ -20,7 +20,7 @@ export function resetCameraToHome(engine: FragmentsEngine | null) {
     const ty = Array.isArray(tgt) ? tgt[1] : tgt.y
     const tz = Array.isArray(tgt) ? tgt[2] : tgt.z
 
-    engine.world.camera.controls.setLookAt(px, py, pz, tx, ty, tz, true)
+    engine.world.camera.controls.setLookAt(px, py, pz, tx, ty, tz, animate)
     return
   }
 
