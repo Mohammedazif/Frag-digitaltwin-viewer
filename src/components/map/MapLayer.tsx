@@ -57,7 +57,7 @@ export function MapLayer({ adminMode, engineRef }: MapLayerProps) {
 
     try {
       await loadModelSet(engineRef.current, handle, meta, modelIds)
-      resetCameraToHome(engineRef.current)
+      resetCameraToHome(engineRef.current, false)
     } finally {
       setPhase('idle')
     }
