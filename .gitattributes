@@ -1,0 +1,22 @@
+# Normalize all text files to LF in the repository, regardless of the
+# checkout platform. Without this, editors on Windows rewrite whole files
+# to CRLF and every line shows as changed.
+* text=auto eol=lf
+
+# Binary assets — never normalized or diffed as text
+*.png   binary
+*.webp  binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.hdr   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+*.glb   binary
+*.frag  binary
+
+# Build artifact, not worth diffing
+*.tsbuildinfo -diff

@@ -20,6 +20,7 @@ import { OrientationCube } from '@/components/viewer/OrientationCube'
 import { useLoadingProgressStore } from '@/store/useLoadingProgressStore'
 import { unloadAllModels } from '@/lib/sceneTeardown'
 import { attachDevBridge } from '@/lib/devBridge'
+import { resetCameraToHome } from '@/lib/cameraUtils'
 import type { FragmentsEngine } from '@/lib/fragmentsEngine'
 
 interface ViewerCanvasProps {
@@ -55,6 +56,17 @@ export function ViewerCanvas({ onEngineReady, adminMode = true, isFinProject = f
   
   // Initialize material overrides
   useMaterialOverrides(engineRef)
+
+  useEffect(() => {
+    const handleDashboardEvent = (event: Event) => {
+      const detail = (event as CustomEvent<{ action?: string; tool?: string }>).detail
+      if (detail?.action === 'viewer-tool' && detail.tool === 'reset') {
+        resetCameraToHome(engineRef.current)
+      }
+    }
+    window.addEventListener('dashboard-event', handleDashboardEvent)
+    return () => window.removeEventListener('dashboard-event', handleDashboardEvent)
+  }, [engineRef])
 
   const models = useModelStore(s => s.models)
   const step = useAppStore(s => s.step)
