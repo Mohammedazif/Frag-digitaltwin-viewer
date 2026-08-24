@@ -26,7 +26,8 @@ dist-ssr
 
 backend/__pycache__/
 CLAUDE.md
-/docs/
+/docs
+/docs/PERF_AUDIT.md
 /Project
 /unrealaddnoc
 /uniqube_temp
@@ -37,6 +38,9 @@ AUDIT_REPORT.md
 /EKO Digital Twin UI Frame/
 /MarsaAlArab
 /EKO-Modon
+/ellisdon-templates-main
+/eko-twin
+/eko-extracted
 
 # Local verification fixtures, served from public/ by the dev server only
 /public/project.json
@@ -47,5 +51,5 @@ AUDIT_REPORT.md
 /scripts/_shots/
 /scratch/
 /tests
-
+/exports
 

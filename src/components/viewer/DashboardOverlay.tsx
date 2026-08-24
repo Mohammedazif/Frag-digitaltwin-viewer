@@ -13,11 +13,6 @@ export function DashboardOverlay({ visible }: DashboardOverlayProps) {
   useEffect(() => {
     if (!visible) return
     let mounted = true
-    const handler = (e: Event) => {
-      const customEvent = e as CustomEvent
-      console.log('[DashboardOverlay] Event caught:', customEvent.detail)
-    }
-    window.addEventListener('dashboard-event', handler)
 
     fetch('templates/index.html?v=' + Date.now())
       .then(res => res.text())
@@ -110,7 +105,6 @@ export function DashboardOverlay({ visible }: DashboardOverlayProps) {
 
     return () => {
       mounted = false
-      window.removeEventListener('dashboard-event', handler)
       document.querySelectorAll('.dt-dashboard-injected').forEach(el => el.remove())
       // Script elements are inert once executed, so the scripts self-release
       ;(window as any).DashboardData?.stop?.()
