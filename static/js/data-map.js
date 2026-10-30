@@ -2200,16 +2200,23 @@
     return typeof n === 'number' && isFinite(n);
   }
 
-  /* Opt-in on this project's heatmap settings. Absent is off, so Marsa never grows sample points. */
+  /* On unless this project saved sampleSpaces: false. Marsa has no space links, so this never fills its rooms. */
   function sampleSpacesOn() {
     var h = window.INJECTED_PROJECT_CONFIG && window.INJECTED_PROJECT_CONFIG.heatmap;
-    return !!(h && h.sampleSpaces === true);
+    return !h || h.sampleSpaces !== false;
   }
 
   function sampleIndex(key) {
     var m = String(key || '').match(/(\d+)/);
     var n = m ? parseInt(m[1], 10) : 1;
     return isFinite(n) && n > 0 ? n : 1;
+  }
+
+  function sampleIndexFromGuid(guid) {
+    var s = String(guid || '');
+    var n = 0;
+    for (var i = 0; i < s.length; i++) n = (n + s.charCodeAt(i) * (i + 1)) % 97;
+    return (n % 9) + 1;
   }
 
   /* Inside the legend bands: 21–25 °C, 40–80 %, 600–1200 ppm. Not the old Marsa room table. */
@@ -2243,7 +2250,7 @@
     if (!sampleSpacesOn() || !links || !links.length) return;
     var guids = {};
     links.forEach(function (l) {
-      if (l && l.guid && sensorKey(l.name)) guids[l.guid] = true;
+      if (l && l.guid) guids[l.guid] = true;
     });
     zones.forEach(function (z) {
       var ids = z.bimIds && z.bimIds.length ? z.bimIds : (z.bimId ? [z.bimId] : []);
@@ -2251,30 +2258,29 @@
       for (var i = 0; i < ids.length; i++) if (guids[ids[i]]) linked = true;
       if (!linked) return;
       var key = sensorKey(z.nameEn);
-      if (!key) return;
-      var n = sampleIndex(key);
-      if (z.kind === 'is') {
-        if (!finiteNum(z.liveTemp)) {
-          z.liveTemp = sampleTemp(n);
-          if (!z.tempId) {
-            z.tempId = 'sample:' + key + ':temp';
-            seedSampleHistory(z.tempId, z.liveTemp);
-          }
+      var n = key ? sampleIndex(key) : sampleIndexFromGuid(z.bimId || ids[0]);
+      var tag = key || String(z.bimId || ids[0] || z.nameEn);
+      /* The sample is the sensor. The saved room name stays as it is. */
+      z.sample = true;
+      if (!finiteNum(z.liveTemp)) {
+        z.liveTemp = sampleTemp(n);
+        if (!z.tempId) {
+          z.tempId = 'sample:' + tag + ':temp';
+          seedSampleHistory(z.tempId, z.liveTemp);
         }
-        if (!finiteNum(z.liveRh)) {
-          z.liveRh = sampleRh(n);
-          if (!z.rhId) {
-            z.rhId = 'sample:' + key + ':rh';
-            seedSampleHistory(z.rhId, z.liveRh);
-          }
+      }
+      if (!finiteNum(z.liveRh)) {
+        z.liveRh = sampleRh(n);
+        if (!z.rhId) {
+          z.rhId = 'sample:' + tag + ':rh';
+          seedSampleHistory(z.rhId, z.liveRh);
         }
-      } else if (z.kind === 'iaq') {
-        if (!finiteNum(z.liveCo2)) {
-          z.liveCo2 = sampleCo2(n);
-          if (!z.co2Id) {
-            z.co2Id = 'sample:' + key + ':co2';
-            seedSampleHistory(z.co2Id, z.liveCo2);
-          }
+      }
+      if (!finiteNum(z.liveCo2)) {
+        z.liveCo2 = sampleCo2(n);
+        if (!z.co2Id) {
+          z.co2Id = 'sample:' + tag + ':co2';
+          seedSampleHistory(z.co2Id, z.liveCo2);
         }
       }
     });
@@ -2316,14 +2322,13 @@
     zones.forEach(function (z) {
       (z.bimIds || []).forEach(function (id) { if (id) usedGuid[id] = true; });
     });
-    /* A linked room is drawn only when its heatmap name is a sensor (IS-01, IAQ-02).
-       The other rooms stay in Equipment & Spaces and are not zones. */
+    /* Sample readings colour every linked room. With samples off, only a sensor name is a zone. */
     linkedSpaces.forEach(function (l) {
       if (!l || !l.guid || usedGuid[l.guid]) return;
       var key = sensorKey(l.name);
-      if (!key) return;
+      if (!key && !sampleSpacesOn()) return;
       usedGuid[l.guid] = true;
-      var kind = key.indexOf('IAQ') === 0 ? 'iaq' : 'is';
+      var kind = key && key.indexOf('IAQ') === 0 ? 'iaq' : 'is';
       zones.push({
         nameEn: l.name, nameAr: l.name, floor: '', kind: kind,
         tempC: null, rh: null, co2: null, hours: [],
@@ -2332,7 +2337,7 @@
         spaceName: l.element || l.name
       });
     });
-    /* Hospital check values only. Off unless this project saved heatmap.sampleSpaces.
+    /* Hospital check values. On unless sampleSpaces is saved false.
        Marsa's SPACE_GUID rooms are built only when there are no space links, and this
        returns before touching them. A live FIN number is never replaced. */
     fillSampleReadings(zones, linkedSpaces);

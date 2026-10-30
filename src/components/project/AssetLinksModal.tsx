@@ -464,7 +464,7 @@ function AssetLinksDialog({ initial, projectName, onClose, engineRef }: AssetLin
 
           <p className="ds-hint" style={{ marginTop: 0 }}>
             {mode === 'space'
-              ? 'Adds IfcSpace rooms for the heatmap by IFC GlobalId. Tick which models to scrape. A file with “space” in its name starts ticked, so rooms from the other models stay out until you tick them. Name a room IS-01 or IAQ-02 to put it on the heatmap. Any other name stays in this list and is not drawn.'
+              ? 'Adds IfcSpace rooms for the heatmap by IFC GlobalId. Tick which models to scrape. A file with “space” in its name starts ticked, so rooms from the other models stay out until you tick them. Sample sensors are added to these rooms for you. Leave the heatmap name as the room name. Type IS-01 or IAQ-02 only when a real FIN sensor should replace the sample on that one room.'
               : 'Links each FIN equipment to its model element by IFC GlobalId. A revised model keeps its GlobalIds, so the links carry over; any that do not are listed as Not in model.'}
           </p>
 
@@ -592,7 +592,7 @@ function AssetLinksDialog({ initial, projectName, onClose, engineRef }: AssetLin
 
           {mode === 'space' && (
             <div className="al-search-row" style={{ marginBottom: 12 }}>
-              <input placeholder="Heatmap name (IS-01)" value={manualName} onChange={e => setManualName(e.target.value)} />
+              <input placeholder="Heatmap name" value={manualName} onChange={e => setManualName(e.target.value)} />
               <input placeholder="IFC GlobalId" value={manualGuid} onChange={e => setManualGuid(e.target.value)} />
               <button className="ds-btn ds-btn-secondary al-small" disabled={!manualName.trim() || !isGuid(manualGuid.trim())} onClick={addManualSpace}>Add</button>
             </div>

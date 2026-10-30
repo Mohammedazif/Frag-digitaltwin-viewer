@@ -692,7 +692,7 @@ window.EKO_A = (function(){
   }
   function heatZones(d, s, mode){
     const kind = mode === 'comfort' ? 'iaq' : 'is';
-    return d.zones.filter(z => z.kind === kind && (s.hmFloor === 'All' || z.floor === s.hmFloor));
+    return d.zones.filter(z => (z.sample || z.kind === kind) && (s.hmFloor === 'All' || z.floor === s.hmFloor));
   }
   function heatValue(z, mode){
     if(mode === 'comfort') return z.co2;

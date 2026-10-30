@@ -60,8 +60,9 @@ function HeatmapPane({
     <div className="ds-pane">
       <h3 className="ds-section-title">Heatmap</h3>
       <p className="ds-hint">
-        A room is drawn only when its heatmap name is a sensor, such as IS-01 or IAQ-02.
-        IS reads zone temperature and humidity. IAQ reads CO2. Other rooms stay in Equipment & Spaces and are not added to the heatmap.
+        Linked rooms are coloured with sample readings until a FIN value arrives.
+        Turn sample readings off and a room is drawn only when its name is a sensor, such as IS-01 or IAQ-02.
+        IS reads zone temperature and humidity. IAQ reads CO2.
         Save, then open the heatmap. Leave this as it is and the project keeps the top view of the ground floor, with the models as they are.
       </p>
 
@@ -69,20 +70,19 @@ function HeatmapPane({
       <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0', fontSize: 13 }}>
         <input
           type="checkbox"
-          checked={current.sampleSpaces === true}
+          checked={current.sampleSpaces !== false}
           onChange={e => {
-            if (e.target.checked) patch({ sampleSpaces: true })
-            else {
+            if (e.target.checked) {
               const next = { ...current }
               delete next.sampleSpaces
               onChange(next)
-            }
+            } else patch({ sampleSpaces: false })
           }}
         />
-        Fill linked sensor rooms when FIN has no reading
+        Fill linked rooms when FIN has no reading
       </label>
       <p className="ds-hint">
-        For a hospital project that has no live readings yet. A room named IS-01 gets a sample temperature and humidity. A room named IAQ-02 gets a sample CO2. Ranking and the hourly cells fill from that sample. A real FIN reading is kept. Marsa is left alone unless this box is ticked and saved. Rooms that are not sensors are still not drawn.
+        Each linked room gets its own sample sensor: temperature, humidity, and CO2. You do not rename the rooms. A real FIN reading replaces the sample on that room. Marsa has no linked rooms, so its heatmap stays on the FIN feed. Turn this off to draw only rooms you name IS-01 or IAQ-02.
       </p>
 
       <h3 className="ds-section-title" style={{ marginTop: 24 }}>View</h3>
