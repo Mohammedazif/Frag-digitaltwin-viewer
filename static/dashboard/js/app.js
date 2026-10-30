@@ -41,8 +41,8 @@
       camera: h.camera === 'inside' ? 'inside' : 'top',
       floor: floor,
       view: view,
-      /* A named storey is that floor only. Ground floor and All floors keep the Marsa filter. */
-      alone: !!(h.floor && h.floor !== 'ALL')
+      /* Same rule as the Levels menu. Isolate floor in the toolbar is what shows one floor on its own. */
+      alone: false
     };
   }
   function applyHeatView(app, forceLook) {

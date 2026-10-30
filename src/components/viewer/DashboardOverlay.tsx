@@ -361,7 +361,6 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       ghost = null
     }
     let heatMoving = false
-    const heatLook = new THREE.Vector3()
     const drawGhost = () => {
       labels.setVisible(!!(ghost && ghost.group.visible && active && labelsOn()))
       const hasHeat = heatRoots.size > 0 || alarmGlow.size > 0
@@ -410,11 +409,9 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       const heatDrawn = heatGroups.some(g => g.visible)
       const ghostDrawn = seeThrough.some(g => g.visible)
       try {
-        camera.getWorldDirection(heatLook)
-        /* Looking down the plan, the room volumes are almost invisible but they
-           still fill the depth buffer, so the colour under them never appears.
-           Draw it on its own. From the side, solid walls still cover it. */
-        if (heatDrawn && (heatMoving || heatLook.y < -0.45)) {
+        /* While the camera is moving, draw the colour on its own. At rest the
+           building covers it the same way a floor pick does, ceiling included. */
+        if (heatDrawn && heatMoving) {
           renderer.clearDepth()
           renderer.render(overlay, camera)
         } else if (heatDrawn && engine.world?.scene?.three) {
@@ -948,7 +945,14 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       try { (window as any).EKO?.set?.({}) } catch { /* dashboard not up yet */ }
     }
     let lastLevelId: string | null = null
+    let levelWait: { id: string; force?: boolean } | null = null
     const isolateLevel = async (levelId: string, force?: boolean) => {
+      /* Indexing a model asks the same worker that is parsing the next file. */
+      if (useLoadingProgressStore.getState().sessionActive) {
+        levelWait = { id: levelId, force }
+        return
+      }
+      levelWait = null
       if (levelId === 'Ground floor' && !floorCatalog.get(levelId)) {
         const gf = [...floorCatalog.values()].find(f => /ground/i.test(f.name) || f.rank === 0)
         if (gf) levelId = gf.id
@@ -1015,47 +1019,14 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       const heat = useProjectStore.getState().currentProject?.apiSettings?.heatmap
       return !!(heat && (heat.insideWalls || heat.camera === 'inside'))
     }
-    /* One horizontal cut, just above the colour, so the ceiling of the open floor
-       is out of the way and the walls still frame the rooms. Absent on Marsa. */
+    /* The heatmap does not cut the ceiling. A floor pick uses the Levels rule only. */
     const heatClip = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
-    const heatClipTop = new THREE.Vector3()
     const syncHeatClip = () => {
       const renderer = engine.world?.renderer?.three as THREE.WebGLRenderer | undefined
       if (!renderer) return
       const planes = renderer.clippingPlanes
-      const drop = () => {
-        const at = planes.indexOf(heatClip)
-        if (at >= 0) planes.splice(at, 1)
-      }
-      if (!heatInsideWalls || !heatSheets.length) { drop(); return }
-      const tops: number[] = []
-      heatRoots.forEach(root => {
-        root.updateWorldMatrix(true, true)
-        for (const mesh of heatSheets) {
-          if (mesh.parent !== root) continue
-          const box = mesh.geometry.boundingBox
-          if (!box) continue
-          heatClipTop.set(0, box.max.y, 0).applyMatrix4(mesh.matrixWorld)
-          tops.push(heatClipTop.y)
-        }
-      })
-      if (!tops.length) { drop(); return }
-      tops.sort((a, b) => a - b)
-      /* The busiest band is this floor. One high box must not lift the cut. */
-      let bestHi = 0
-      let bestN = 0
-      let lo = 0
-      for (let hi = 0; hi < tops.length; hi++) {
-        while (tops[hi] - tops[lo] > 1.5) lo++
-        const n = hi - lo + 1
-        if (n >= bestN) { bestN = n; bestHi = hi }
-      }
-      const openTop = tops[bestHi]
-      /* normal (0,-1,0), constant openTop+0.08. distance = openTop+0.08 - y.
-         Clipped only above the colour: the colour stays, a ceiling 1m above goes.
-         Holds for a top-down camera and an angled one. */
-      heatClip.set(new THREE.Vector3(0, -1, 0), openTop + 0.08)
-      if (planes.indexOf(heatClip) < 0) planes.push(heatClip)
+      const at = planes.indexOf(heatClip)
+      if (at >= 0) planes.splice(at, 1)
     }
     /* Two colours per category so the low end and the high end stay distinct.
        The same pairs are in analytics.js heatStops. */
@@ -1587,6 +1558,7 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
     const profileTries = new Map<string, number>()
     const profiling = new Set<string>()
     const ensureProfiles = () => {
+      if (useLoadingProgressStore.getState().sessionActive) return
       const fragList = engine.fragments?.models?.list
       if (!fragList) return
       for (const rec of useModelStore.getState().models) {
@@ -1810,6 +1782,11 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       }
       // A control room opened from its own URL goes home once its models load
       if (modelsChanged && live.length && document.querySelector('.dashboard-native-container[data-wall="1"]')) resetCameraToHome(engine)
+      if (justLoaded && levelWait) {
+        const wait = levelWait
+        levelWait = null
+        void isolateLevel(wait.id, true)
+      }
       if (justLoaded && heatReq && (window as any).EKO?.state?.pageId === 'heatmap') {
         heatSig = ''
         void applySpaceHeat(heatReq.zones, heatReq.mode)
