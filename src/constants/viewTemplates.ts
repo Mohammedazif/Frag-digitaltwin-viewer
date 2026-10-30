@@ -78,7 +78,7 @@ export const DASHBOARD_DARK_SKY: SkyStop[] = [
 export const VIEW_TEMPLATES: ViewTemplate[] = [
   {
     id: 'default',
-    label: 'Default',
+    label: 'Basic',
     note: 'Project settings',
     description: 'Uses your own sky, lights and render settings. Switch on Advanced Rendering or Render Lite below for extra quality.',
     scene: null,
@@ -148,7 +148,7 @@ export const VIEW_TEMPLATES: ViewTemplate[] = [
   },
   {
     id: 'minimal',
-    label: 'Minimalist',
+    label: 'B/W',
     note: 'White model',
     description: 'Bleached-white surfaces on a bright studio backdrop, with a soft sun shadow, grey AO and thin pencil-line edges.',
     scene: {

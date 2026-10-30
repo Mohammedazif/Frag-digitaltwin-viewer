@@ -1330,7 +1330,9 @@ export async function initFragmentsEngine(
     if (lastLighting) setLightingParams(lastLighting)
   }
 
-  setLightingParams(RENDER_DEFAULTS)
+  // The engine starts on the project's own look. A template is applied at the end of this function: it needs
+  // the camera, the composer and its passes, and the fragments manager, none of which exist yet.
+  setLightingParams({ ...RENDER_DEFAULTS, templateId: 'default' })
 
   world.camera = new OBC.SimpleCamera(components)
 
@@ -1958,6 +1960,9 @@ export async function initFragmentsEngine(
     disposeTemplateComposer()
     components.dispose()
   }
+
+  // Everything a template reads is built now
+  if (RENDER_DEFAULTS.templateId !== 'default') setLightingParams(RENDER_DEFAULTS)
 
   return { fragments, world, components, dispose, setLightingParams, setDashboardDark }
 }

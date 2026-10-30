@@ -16,7 +16,7 @@ import {
   onContentProfiles, pruneContentProfiles, setContentProfile, type ContentProfile,
 } from '@/lib/layerGroups'
 import { runIfcDiagnostics } from '@/lib/ifcDiagnostics' // TEMPORARY, with EKO_IFC_DIAGNOSTICS below
-import { HVAC_GENERIC, HVAC_SPECIFIC, isCeilingType, levelHides, type LevelIndex, type MechanicalInfo } from '@/lib/floorPolicy'
+import { HVAC_GENERIC, HVAC_SPECIFIC, floorFilterSkips, isCeilingType, levelHides, reportLevel, type LevelIndex, type MechanicalInfo } from '@/lib/floorPolicy'
 import { setHidden, isHidden, onVisibilityApplied } from '@/lib/visibilityCoordinator'
 import { measureTool } from '@/lib/measureTool'
 import { sliceTool, unwatchClipping, watchClipping } from '@/lib/sliceTool'
@@ -893,10 +893,13 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
            answer leaves both empty, which is the plain floor filter. */
         const ceilings = new Set<number>()
         const hvac = new Map<number, MechanicalInfo>()
+        const ground = new Set<number>()
         try {
           const onGeometry = new Set(geom)
           const idsOf = (found: any) => (Object.values(found || {}).flat() as number[]).filter(id => onGeometry.has(id))
           if (typeof model.getItemsOfCategories === 'function') {
+            /* The terrain a building model carries: not part of any floor, so a floor pick keeps it (lib/floorPolicy) */
+            for (const id of idsOf(await model.getItemsOfCategories([/^IFCSITE$/i, /^IFCGEOGRAPHICELEMENT$/i]))) ground.add(id)
             const coverings = idsOf(await model.getItemsOfCategories([/^IFCCOVERING$/i]))
             if (coverings.length && typeof model.getItemsData === 'function') {
               const rows = await model.getItemsData(coverings, {
@@ -922,7 +925,7 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
             }
           }
         } catch { /* plain floor filter */ }
-        return { geom, byFloor, ceilings, hvac }
+        return { geom, byFloor, ceilings, hvac, ground }
       })().catch((err) => { floorJobs.delete(model); throw err })
       floorJobs.set(model, job)
       return job
@@ -974,6 +977,9 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
         const hideAll = () => { levelHidden.set(m, new Set(entry.geom)); return setHidden(m, 'level', entry.geom) }
         levelHidden.delete(m)
         if (!levelId || levelId === 'ALL' || !entry.byFloor.size) { await setHidden(m, 'level', []); continue }
+        /* The Landscape is not on the building's floors: it stays whole unless the floor is isolated */
+        const rec = useModelStore.getState().models.find(r => r.modelId === m.modelId)
+        if (rec && floorFilterSkips(classifyLoaded(rec).group, alone)) { await setHidden(m, 'level', []); continue }
         /* Basement is only itself. Each floor above also keeps everything below it, unless Isolate floor is on.
            What the floor hides beyond that (its own ceilings) and keeps beyond that (the HVAC) is lib/floorPolicy. */
         const picked = floorCatalog.get(levelId)
@@ -992,6 +998,41 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
           void applySpaceHeat(heatReq.zones, heatReq.mode)
         }
       }
+    }
+
+    /* TEMPORARY, read-only: why the floor filter hides what it hides, model by model. Reached from the browser
+       console as EKO_FLOOR_FILTER_REPORT('Third floor'); the picked floor and Isolate floor are read as they stand.
+       It changes nothing: it only restates what isolateLevel would do (lib/floorPolicy reportLevel). */
+    const describeLevelFilter = async (levelId?: string) => {
+      const dock = (window as any).EKO?.state?.dock
+      const id = levelId || dock?.level
+      const alone = !!dock?.floorAlone
+      const picked = floorCatalog.get(id)
+      const models: Record<string, unknown>[] = []
+      for (const model of engine.fragments?.models?.list?.values() ?? []) {
+        const m = model as any
+        const rec = useModelStore.getState().models.find(r => r.modelId === m.modelId)
+        const cls = rec ? classifyLoaded(rec) : null
+        const rep = reportLevel(await indexModel(m), picked, fid => floorCatalog.get(fid)?.rank, { alone }, cls?.group ?? 'unknown')
+        // What the model files under no floor, by IFC class
+        const classes: Record<string, number> = {}
+        if (rep.onNoFloor.length && typeof m.getItemsData === 'function') {
+          try {
+            for (let i = 0; i < rep.onNoFloor.length; i += 1500) {
+              const rows = await m.getItemsData(rep.onNoFloor.slice(i, i + 1500), {
+                attributesDefault: false, attributes: ['Name'], relationsDefault: { attributes: false, relations: false },
+              })
+              for (const row of rows) { const c = row?._category?.value ?? '?'; classes[c] = (classes[c] ?? 0) + 1 }
+            }
+          } catch { /* the counts above stand */ }
+        }
+        models.push({
+          file: rec?.originalFileName ?? m.modelId, group: cls?.group ?? 'unknown', classified: cls?.known ?? false,
+          skippedByFloorPick: rep.skipped, groundKept: rep.groundKept, geometry: rep.geometry, floors: rep.floors, hidden: rep.hidden,
+          onNoFloor: rep.onNoFloor.length, onNoFloorClasses: Object.entries(classes).sort((a, b) => b[1] - a[1]).slice(0, 8),
+        })
+      }
+      return { floor: id, floorKnown: !!picked, isolateFloor: alone, models }
     }
 
     /* The Spaces model is the heat map's: hidden in normal viewing, shown while the heat map is applied.
@@ -1607,6 +1648,12 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
     const unsubLayers = () => { unsubStore(); unsubProfiles() }
     syncLayers()
     ;(window as any).EKO_MODEL_DISCIPLINES = () => describeModels(useModelStore.getState().models)
+    // TEMPORARY, read-only: why the floor filter hides what it hides (describeLevelFilter above)
+    ;(window as any).EKO_FLOOR_FILTER_REPORT = async (levelId?: string) => {
+      const report = await describeLevelFilter(levelId)
+      console.log('[EKO_FLOOR_FILTER_REPORT]', JSON.stringify(report, null, 2))
+      return report
+    }
     // TEMPORARY, read-only: what the loaded models contain (lib/ifcDiagnostics.ts)
     ;(window as any).EKO_IFC_DIAGNOSTICS = (which?: string | string[]) => runIfcDiagnostics({
       models: useModelStore.getState().models, fragments: engine.fragments?.models?.list,
@@ -1841,6 +1888,7 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       delete (window as any).EKO_HOST_ENGINE
       delete (window as any).EKO_MODEL_DISCIPLINES
       delete (window as any).EKO_IFC_DIAGNOSTICS
+      delete (window as any).EKO_FLOOR_FILTER_REPORT
     }
   }, [engineReady])
 
