@@ -84,7 +84,7 @@ function HeatmapPane({
           }}>Use the automatic top view</button>
         )}
       </div>
-      <p className="ds-hint">Point the model, then save this top view. The heatmap opens there. Save Settings keeps it. Inside the floor still uses its own look.</p>
+      <p className="ds-hint">Point the model, then save this top view. Only the heatmap opens there. Save Settings keeps it. Other panels keep the camera from Save Camera &amp; Render View. Inside the floor still uses its own look.</p>
       <p className="ds-hint">Inside the floor looks in from a high corner. The ceiling of that storey is cut away, so the colour sits between the walls. Top view does the same while the box below is ticked.</p>
       <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0 16px', fontSize: 13 }}>
         <input

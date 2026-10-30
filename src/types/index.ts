@@ -255,7 +255,7 @@ export interface FinSeverityBands {
 export interface HeatmapSetup {
   /** top looks straight down. inside looks in from a high corner, under the ceiling. */
   camera?: 'top' | 'inside'
-  /** The top-view camera the user saved. Absent uses the automatic top look. */
+  /** The heatmap top-view camera. Other panels keep the project camera. Absent uses the automatic top look. */
   view?: ProjectCamera
   /** A storey id from the model, or ALL. Absent isolates Ground floor. */
   floor?: string

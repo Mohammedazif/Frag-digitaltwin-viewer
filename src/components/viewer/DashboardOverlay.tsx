@@ -1531,6 +1531,18 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       miniMap.capture()
     }
 
+    const lookAtView = (view?: { position?: number[]; target?: number[] }) => {
+      const camCtl = engine.world?.camera?.controls as { setLookAt?: Function; updateCameraUp?: Function } | undefined
+      const pos = view?.position
+      const tgt = view?.target
+      if (!camCtl?.setLookAt || !pos || !tgt || pos.length !== 3 || tgt.length !== 3) return false
+      const cam = engine.world?.camera?.three as THREE.PerspectiveCamera | undefined
+      cam?.up.set(0, 1, 0)
+      camCtl.updateCameraUp?.()
+      camCtl.setLookAt(pos[0], pos[1], pos[2], tgt[0], tgt[1], tgt[2], true)
+      return true
+    }
+
     ;(window as any).EKO_HOST_ENGINE = {
       projectPoint,
       resolveAllAssetPositions,
@@ -1628,15 +1640,7 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
     const onHeatMove = () => { heatMoving = true }
     const onHeatRest = () => { heatMoving = false }
     const onHeatCamera = (e: Event) => {
-      const view = (e as CustomEvent).detail as { position?: number[]; target?: number[] } | undefined
-      const camCtl = engine.world?.camera?.controls as { setLookAt?: Function; updateCameraUp?: Function } | undefined
-      const pos = view?.position
-      const tgt = view?.target
-      if (!camCtl?.setLookAt || !pos || !tgt || pos.length !== 3 || tgt.length !== 3) return
-      const cam = engine.world?.camera?.three as THREE.PerspectiveCamera | undefined
-      cam?.up.set(0, 1, 0)
-      camCtl.updateCameraUp?.()
-      camCtl.setLookAt(pos[0], pos[1], pos[2], tgt[0], tgt[1], tgt[2], true)
+      lookAtView((e as CustomEvent).detail)
     }
     controls?.addEventListener('update', onCameraUpdate)
     controls?.addEventListener('controlstart', onHeatMove)
