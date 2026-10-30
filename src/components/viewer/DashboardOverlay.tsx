@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import * as OBC from '@thatopen/components'
 import { useProjectStore } from '@/store/useProjectStore'
+import { useLoadingProgressStore } from '@/store/useLoadingProgressStore'
 import { useAppStore } from '@/store/useAppStore'
 import { useModelStore } from '@/store/useModelStore'
 import { foldName, indexLinks, indexSpaceLinks, isGuid } from '@/lib/assetLinks'
@@ -360,6 +361,7 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       ghost = null
     }
     let heatMoving = false
+    const heatLook = new THREE.Vector3()
     const drawGhost = () => {
       labels.setVisible(!!(ghost && ghost.group.visible && active && labelsOn()))
       const hasHeat = heatRoots.size > 0 || alarmGlow.size > 0
@@ -408,10 +410,12 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       const heatDrawn = heatGroups.some(g => g.visible)
       const ghostDrawn = seeThrough.some(g => g.visible)
       try {
-        if (heatDrawn && (heatInsideWalls || heatMoving)) {
-          /* While the camera is moving, draw the colour on its own. Rebuilding
-             the building's depth on every pan and zoom is a second full render. */
-          if (!heatInsideWalls) renderer.clearDepth()
+        camera.getWorldDirection(heatLook)
+        /* Looking down the plan, the room volumes are almost invisible but they
+           still fill the depth buffer, so the colour under them never appears.
+           Draw it on its own. From the side, solid walls still cover it. */
+        if (heatDrawn && (heatMoving || heatLook.y < -0.45)) {
+          renderer.clearDepth()
           renderer.render(overlay, camera)
         } else if (heatDrawn && engine.world?.scene?.three) {
           const scene = engine.world.scene.three
@@ -1075,12 +1079,15 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       heatRoots.set(model, root)
       return root
     }
-    const boxFrom = (localBox: THREE.Box3) => {
+    /* A flat grid at the top of the room, only when the space has no mesh.
+       A solid box is what made the floor look like coloured crates. */
+    const plateFrom = (localBox: THREE.Box3) => {
       const size = localBox.getSize(new THREE.Vector3())
       const center = localBox.getCenter(new THREE.Vector3())
-      const box = new THREE.BoxGeometry(Math.max(size.x, 0.2), Math.max(size.y, 0.2), Math.max(size.z, 0.2))
-      box.translate(center.x, center.y, center.z)
-      return box
+      const geom = new THREE.PlaneGeometry(Math.max(size.x, 0.2), Math.max(size.z, 0.2), 4, 4)
+      geom.rotateX(-Math.PI / 2)
+      geom.translate(center.x, center.y + size.y / 2, center.z)
+      return geom
     }
     const geomsFor = async (bimId: string, entry: Located) => {
       const hit = heatGeoms.get(bimId)
@@ -1100,13 +1107,7 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
           geoms.push(geom)
         }
       }
-      if (!geoms.length && entry.localBox && !entry.localBox.isEmpty()) {
-        const size = entry.localBox.getSize(new THREE.Vector3())
-        const center = entry.localBox.getCenter(new THREE.Vector3())
-        const box = new THREE.BoxGeometry(Math.max(size.x, 0.2), Math.max(size.y, 0.2), Math.max(size.z, 0.2))
-        box.translate(center.x, center.y, center.z)
-        geoms.push(box)
-      }
+      if (!geoms.length && entry.localBox && !entry.localBox.isEmpty()) geoms.push(plateFrom(entry.localBox))
       heatGeoms.set(bimId, geoms)
       return geoms
     }
@@ -1270,44 +1271,10 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       mesh.renderOrder = 2
       return mesh
     }
-    /* One colour for the whole room. Used when many rooms share a few sensors,
-       so the view does not blend every room against every other room. */
-    const paintFlatPlate = (
-      geom: THREE.BufferGeometry,
-      own: { x: number; y: number; z: number; hx: number; hy: number; hz: number },
-      color: THREE.Color,
-      inset: boolean,
-    ) => {
-      const g = geom.getIndex() ? geom.toNonIndexed() : geom.clone()
-      const pos = g.getAttribute('position') as THREE.BufferAttribute
-      const sx = own.hx > 0.08 ? Math.max((own.hx - 0.05) / own.hx, 0.85) : 1
-      const sz = own.hz > 0.08 ? Math.max((own.hz - 0.05) / own.hz, 0.85) : 1
-      const sy = inset && own.hy > 0.05 ? Math.max(1 - Math.min(0.45, own.hy * 0.45) / own.hy, 0.55) : 1
-      const drop = inset ? (1 - sy) * own.hy * 0.85 : 0
-      for (let i = 0; i < pos.count; i++) {
-        pos.setX(i, own.x + (pos.getX(i) - own.x) * sx)
-        pos.setY(i, own.y + (pos.getY(i) - own.y) * sy - drop)
-        pos.setZ(i, own.z + (pos.getZ(i) - own.z) * sz)
-      }
-      pos.needsUpdate = true
-      const colors = new Float32Array(pos.count * 4)
-      for (let i = 0; i < pos.count; i++) {
-        const o = i * 4
-        colors[o] = color.r
-        colors[o + 1] = color.g
-        colors[o + 2] = color.b
-        colors[o + 3] = 0.55
-      }
-      g.setAttribute('color', new THREE.BufferAttribute(colors, 4))
-      g.computeBoundingBox()
-      g.computeBoundingSphere()
-      const mesh = new THREE.Mesh(g, heatPlateMat())
-      mesh.frustumCulled = false
-      mesh.renderOrder = 2
-      return mesh
-    }
     const applySpaceHeat = async (zones: { bimId?: string; bimIds?: string[]; tempC?: number | null; rh?: number | null; co2?: number | null }[], mode?: string) => {
       heatReq = { zones, mode }
+      /* Locating every room shares the worker that is still parsing the next file. */
+      if (useLoadingProgressStore.getState().sessionActive) return
       spaceHeatActive = true
       applySpacesGate()
       const inside = heatInsideOf()
@@ -1344,35 +1311,49 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       if (seq !== heatSeq) return
       const onOpen = (entry: Located) => {
         if (levelId === 'ALL') return true
+        /* The floor filter hides the space meshes. Colour uses the room's height
+           instead, so a hidden space on this storey still paints. */
+        if (span) {
+          entry.model.object.updateMatrixWorld(true)
+          const y = entry.localBox.getCenter(new THREE.Vector3()).applyMatrix4(entry.model.object.matrixWorld).y
+          return y >= span.yLo - 1.5 && y <= span.yHi + 1.5
+        }
         const hidden = levelHidden.get(entry.model)
         if (hidden) return !hidden.has(entry.localId)
-        if (!span) return true
-        entry.model.object.updateMatrixWorld(true)
-        const y = entry.localBox.getCenter(new THREE.Vector3()).applyMatrix4(entry.model.object.matrixWorld).y
-        return y >= span.yLo - 1 && y <= span.yHi + 1
+        return true
       }
       const openFound = found.filter(item => onOpen(item.entry))
       /* A real floor test that matches nothing stays empty. Painting every
          storey would put the ceiling cut on the wrong floor and hide the model. */
       const tested = levelId !== 'ALL' && (!!span || found.some(item => levelHidden.has(item.entry.model)))
       const use = tested ? openFound : found
-      /* Hundreds of rooms: a box from the space bounds, not each IfcSpace mesh.
-         Pulling every mesh is what froze the browser before any colour appeared. */
-      const many = use.length > 24
+      /* One linked space is often the whole floor. Its box is not a room.
+         Drop a footprint much larger than the typical room on this pass. */
+      const footprint = (entry: Located) => {
+        const s = entry.localBox.getSize(new THREE.Vector3())
+        return Math.abs(s.x * s.z)
+      }
+      const areas = use.map(item => footprint(item.entry))
+      const finite = areas.filter(a => a > 1).sort((a, b) => a - b)
+      const typical = finite.length ? finite[Math.floor(finite.length / 2)] : 0
+      const roomsOnly = typical > 0 ? use.filter((_, i) => areas[i] <= typical * 16) : use
+      const paint = roomsOnly.length ? roomsOnly : use
       type Room = { model: any; geoms: THREE.BufferGeometry[]; x: number; y: number; z: number; hx: number; hy: number; hz: number; t: number }
       const rooms: Room[] = []
-      for (const item of use) {
-        if (seq !== heatSeq) break
-        const geoms = many ? [boxFrom(item.entry.localBox)] : await geomsFor(item.bimId, item.entry)
-        if (!geoms.length) continue
-        const c = item.entry.localBox.getCenter(new THREE.Vector3())
-        const size = item.entry.localBox.getSize(new THREE.Vector3())
-        rooms.push({ model: item.entry.model, geoms, x: c.x, y: c.y, z: c.z, hx: size.x / 2, hy: size.y / 2, hz: size.z / 2, t: item.t })
+      let paintCursor = 0
+      const paintOne = async () => {
+        while (paintCursor < paint.length) {
+          const item = paint[paintCursor++]
+          if (seq !== heatSeq) return
+          const geoms = await geomsFor(item.bimId, item.entry)
+          if (!geoms.length) continue
+          const c = item.entry.localBox.getCenter(new THREE.Vector3())
+          const size = item.entry.localBox.getSize(new THREE.Vector3())
+          rooms.push({ model: item.entry.model, geoms, x: c.x, y: c.y, z: c.z, hx: size.x / 2, hy: size.y / 2, hz: size.z / 2, t: item.t })
+        }
       }
-      if (seq !== heatSeq) {
-        if (many) for (const room of rooms) room.geoms.forEach(g => g.dispose())
-        return
-      }
+      await Promise.all(Array.from({ length: Math.min(6, paint.length) }, () => paintOne()))
+      if (seq !== heatSeq) return
       const stops = HEAT_STOPS[md] || HEAT_STOPS.temp
       const low = new THREE.Color(stops[0])
       const high = new THREE.Color(stops[1])
@@ -1383,33 +1364,42 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
         byModel.set(room.model, list)
       }
       byModel.forEach((samples, model) => {
-        const many = samples.length > 24
-        let sigma = 1
-        if (!many) {
-          let near = 0, nearN = 0
-          for (let i = 0; i < samples.length; i++) {
-            let best = Infinity
-            for (let j = 0; j < samples.length; j++) {
-              if (i === j) continue
-              best = Math.min(best, Math.hypot(samples[i].x - samples[j].x, samples[i].z - samples[j].z))
-            }
-            if (isFinite(best) && best > 0) { near += best; nearN++ }
-          }
-          sigma = Math.max(nearN ? (near / nearN) * 0.85 : 1, 0.5)
+        /* Same blend Marsa uses. With hundreds of rooms, blend from one point
+           per temperature so the colour still grades and the page does not lock. */
+        const field = new Map<string, { x: number; z: number; n: number; t: number }>()
+        for (const room of samples) {
+          const key = room.t.toFixed(3)
+          const g = field.get(key) ?? { x: 0, z: 0, n: 0, t: room.t }
+          g.x += room.x
+          g.z += room.z
+          g.n++
+          field.set(key, g)
         }
+        const graded = samples.length > 24
+          ? [...field.values()].map(g => ({ x: g.x / g.n, z: g.z / g.n, t: g.t }))
+          : samples
+        let near = 0, nearN = 0
+        for (let i = 0; i < graded.length; i++) {
+          let best = Infinity
+          for (let j = 0; j < graded.length; j++) {
+            if (i === j) continue
+            best = Math.min(best, Math.hypot(graded[i].x - graded[j].x, graded[i].z - graded[j].z))
+          }
+          if (isFinite(best) && best > 0) { near += best; nearN++ }
+        }
+        const sigma = Math.max(nearN ? (near / nearN) * 0.85 : 1, 0.5)
         const root = heatRootOf(model)
         for (const room of samples) {
-          const tint = many ? low.clone().lerp(high, room.t) : null
           for (const geom of room.geoms) {
-            const mesh = many && tint
-              ? paintFlatPlate(geom, room, tint, inside)
-              : paintRoomPlate(geom, room, samples, sigma, low, high, inside)
+            const mesh = paintRoomPlate(geom, room, graded, sigma, low, high, inside)
             root.add(mesh)
             heatSheets.push(mesh)
           }
         }
       })
       syncGhost()
+      const wake = engine.world?.renderer as { needsUpdate?: boolean } | undefined
+      if (wake) wake.needsUpdate = true
     }
 
     // Same rule as isAlarmed
@@ -1788,7 +1778,12 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
     let nextKey = 0
     const keyOf = (m: object) => modelKeys.get(m) ?? (modelKeys.set(m, ++nextKey), nextKey)
     let modelsSig = ''
+    let modelsWereLoading = useLoadingProgressStore.getState().sessionActive
     const resolveTimer = setInterval(() => {
+      const loading = useLoadingProgressStore.getState().sessionActive
+      if (loading) { modelsWereLoading = true; return }
+      const justLoaded = modelsWereLoading
+      modelsWereLoading = false
       ensureProfiles()
       applySpacesGate()
       const live = [...(engine.fragments?.models?.list?.values() ?? [])]
@@ -1815,9 +1810,15 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       }
       // A control room opened from its own URL goes home once its models load
       if (modelsChanged && live.length && document.querySelector('.dashboard-native-container[data-wall="1"]')) resetCameraToHome(engine)
+      if (justLoaded && heatReq && (window as any).EKO?.state?.pageId === 'heatmap') {
+        heatSig = ''
+        void applySpaceHeat(heatReq.zones, heatReq.mode)
+      }
     }, 3000)
-    void resolveAllAssetPositions()
-    void refreshLevels()
+    if (!useLoadingProgressStore.getState().sessionActive) {
+      void resolveAllAssetPositions()
+      void refreshLevels()
+    }
 
     return () => {
       try {
