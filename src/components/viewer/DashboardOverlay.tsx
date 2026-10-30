@@ -1381,9 +1381,11 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       dropHeatSheets()
       type Found = { entry: Located; t: number; bimId: string }
       const wanted = new Set(jobs.map(job => job.bimId))
-      const onThisFloor = levelId === 'ALL' ? wanted : await guidsForFloor(levelId, wanted)
+      const oneFloor = levelId !== 'ALL'
+      const onThisFloor = oneFloor ? await guidsForFloor(levelId, wanted) : wanted
       if (seq !== heatSeq) return
-      const first = levelId === 'ALL' || onThisFloor.size ? [...onThisFloor] : [...wanted]
+      /* All floors reads every saved room. A named floor reads only that storey. */
+      const first = oneFloor ? [...onThisFloor] : [...wanted]
       await locateMany(first)
       if (seq !== heatSeq) return
       const found: Found[] = []
@@ -1448,7 +1450,9 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
         list.push(room)
         byModel.set(room.model, list)
       }
-      byModel.forEach((samples, model) => {
+      const wake = engine.world?.renderer as { needsUpdate?: boolean } | undefined
+      const nextFrame = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
+      for (const [model, samples] of byModel) {
         /* Same blend Marsa uses. With hundreds of rooms, blend from one point
            per temperature so the colour still grades and the page does not lock. */
         const field = new Map<string, { x: number; z: number; n: number; t: number }>()
@@ -1475,30 +1479,16 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
         const sigma = Math.max(nearN ? (near / nearN) * 0.85 : 1, 0.5)
         const root = heatRootOf(model)
         for (const room of samples) {
+          if (seq !== heatSeq) return
           for (const geom of room.geoms) {
             const mesh = paintRoomPlate(geom, room, graded, sigma, low, high, inside)
             root.add(mesh)
             heatSheets.push(mesh)
           }
+          syncGhost()
+          if (wake) wake.needsUpdate = true
+          await nextFrame()
         }
-      })
-      syncGhost()
-      const wake = engine.world?.renderer as { needsUpdate?: boolean } | undefined
-      if (wake) wake.needsUpdate = true
-      /* The other floors fill the cache. Switching then paints from that, and
-         the floor you switch to is read first if it is not ready yet. */
-      const rest = jobs.filter(job => !located.has(job.bimId)).map(job => job.bimId)
-      if (rest.length && levelId !== 'ALL') {
-        const token = seq
-        void (async () => {
-          const floors = [...floorCatalog.keys()].filter(id => id !== levelId)
-          for (const id of floors) {
-            if (token !== heatSeq) return
-            const ids = await guidsForFloor(id, new Set(rest))
-            await locateMany([...ids])
-          }
-          if (token === heatSeq) await locateMany(rest)
-        })()
       }
     }
 
