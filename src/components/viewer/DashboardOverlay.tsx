@@ -188,6 +188,69 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       return job
     }
 
+    /* Which saved rooms the model files on this storey. One storey, not every room. */
+    const guidFloor = new Map<string, string>()
+    const guidsForFloor = async (levelId: string, wanted: Set<string>) => {
+      const out = new Set<string>()
+      if (!levelId || levelId === 'ALL' || !wanted.size || !engine?.fragments?.models?.list) return out
+      const models = [...engine.fragments.models.list.values()]
+      models.sort((a, b) => {
+        const rec = (m: any) => useModelStore.getState().models.find(r => r.modelId === m.modelId)
+        const space = (m: any) => rec(m) && classifyLoaded(rec(m)!).group === 'spaces' ? 0 : 1
+        return space(a) - space(b)
+      })
+      for (const model of models) {
+        const m = model as any
+        if (typeof m.getRelations !== 'function' || typeof m.getGuidsByLocalIds !== 'function') continue
+        const storeys = (await readStoreys(m)).filter(s => s.floor.id === levelId)
+        if (!storeys.length) continue
+        const rels = relationData(await m.getRelations(storeys.map(s => s.localId)))
+        const ids: number[] = []
+        for (const s of storeys) for (const id of rels.get(s.localId)?.ContainsElements || []) ids.push(id)
+        if (!ids.length) continue
+        const guids: Array<string | null> = await m.getGuidsByLocalIds(ids)
+        guids.forEach(g => {
+          if (!g || !wanted.has(g)) return
+          out.add(g)
+          guidFloor.set(g, levelId)
+        })
+        if (out.size) break
+      }
+      return out
+    }
+
+    /* Saved rooms: one guid lookup and one box read per model, not one mesh per room. */
+    const locateMany = async (guids: string[]) => {
+      const need = [...new Set(guids.filter(id => isGuid(id) && !located.has(id) && !missing.has(id)))]
+      if (!need.length || !engine?.fragments?.models?.list) return
+      let left = new Set(need)
+      for (const model of engine.fragments.models.list.values()) {
+        if (!left.size) break
+        const m = model as any
+        if (typeof m.getLocalIdsByGuids !== 'function') continue
+        const ask = [...left]
+        let localIds: Array<number | null> = []
+        try { localIds = await m.getLocalIdsByGuids(ask) } catch { continue }
+        const found: { guid: string; localId: number }[] = []
+        localIds.forEach((id, i) => {
+          if (id == null) return
+          found.push({ guid: ask[i], localId: id })
+          left.delete(ask[i])
+        })
+        if (!found.length || typeof m.getBoxes !== 'function') continue
+        m.object.updateMatrixWorld(true)
+        let boxes: THREE.Box3[] = []
+        try { boxes = await m.getBoxes(found.map(item => item.localId)) } catch { boxes = [] }
+        const inv = m.object.matrixWorld.clone().invert()
+        found.forEach((item, i) => {
+          const worldBox = boxes[i]
+          if (!worldBox || worldBox.isEmpty()) return
+          located.set(item.guid, { model: m, localId: item.localId, localBox: worldBox.clone().applyMatrix4(inv) })
+          indexProven = true
+        })
+      }
+    }
+
     const worldBoxOf = (entry: Located) => entry.localBox.clone().applyMatrix4(entry.model.object.matrixWorld)
 
     const repositionMarkers = () => {
@@ -756,7 +819,15 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       const n = parseInt(lv[1], 10)
       return Number.isFinite(n) ? numberedFloor(n) : null
     }
+    const storeyCache = new WeakMap<object, Promise<{ localId: number; floor: Floor; elevation: number }[]>>()
     const readStoreys = async (model: any) => {
+      const cached = storeyCache.get(model)
+      if (cached) return cached
+      const job = readStoreysNow(model)
+      storeyCache.set(model, job)
+      return job
+    }
+    const readStoreysNow = async (model: any) => {
       if (typeof model.getItemsOfCategories !== 'function') return [] as { localId: number; floor: Floor; elevation: number }[]
       const cats = await model.getItemsOfCategories([/IFCBUILDINGSTOREY/i])
       const ids = Object.values(cats || {}).flat() as number[]
@@ -1309,17 +1380,19 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       heatSig = sig
       dropHeatSheets()
       type Found = { entry: Located; t: number; bimId: string }
+      const wanted = new Set(jobs.map(job => job.bimId))
+      const onThisFloor = levelId === 'ALL' ? wanted : await guidsForFloor(levelId, wanted)
+      if (seq !== heatSeq) return
+      const first = levelId === 'ALL' || onThisFloor.size ? [...onThisFloor] : [...wanted]
+      await locateMany(first)
+      if (seq !== heatSeq) return
       const found: Found[] = []
-      let cursor = 0
-      const take = async () => {
-        while (cursor < jobs.length) {
-          const job = jobs[cursor++]
-          const entry = await locate(job.bimId)
-          if (!entry?.localBox || entry.localBox.isEmpty()) continue
-          found.push({ entry, t: job.t, bimId: job.bimId })
-        }
+      for (const job of jobs) {
+        if (levelId !== 'ALL' && onThisFloor.size && !onThisFloor.has(job.bimId) && guidFloor.get(job.bimId) !== levelId) continue
+        const entry = located.get(job.bimId) ?? null
+        if (!entry?.localBox || entry.localBox.isEmpty()) continue
+        found.push({ entry, t: job.t, bimId: job.bimId })
       }
-      await Promise.all(Array.from({ length: Math.min(8, jobs.length) }, () => take()))
       if (seq !== heatSeq) return
       const onOpen = (entry: Located) => {
         if (levelId === 'ALL') return true
@@ -1351,20 +1424,20 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       const roomsOnly = typical > 0 ? use.filter((_, i) => areas[i] <= typical * 16) : use
       const paint = roomsOnly.length ? roomsOnly : use
       type Room = { model: any; geoms: THREE.BufferGeometry[]; x: number; y: number; z: number; hx: number; hy: number; hz: number; t: number }
+      /* The saved list is names and ids. The colour uses each room's bounds,
+         which were just read in one pass. It does not pull every room mesh. */
       const rooms: Room[] = []
-      let paintCursor = 0
-      const paintOne = async () => {
-        while (paintCursor < paint.length) {
-          const item = paint[paintCursor++]
-          if (seq !== heatSeq) return
-          const geoms = await geomsFor(item.bimId, item.entry)
-          if (!geoms.length) continue
-          const c = item.entry.localBox.getCenter(new THREE.Vector3())
-          const size = item.entry.localBox.getSize(new THREE.Vector3())
-          rooms.push({ model: item.entry.model, geoms, x: c.x, y: c.y, z: c.z, hx: size.x / 2, hy: size.y / 2, hz: size.z / 2, t: item.t })
-        }
+      for (const item of paint) {
+        const c = item.entry.localBox.getCenter(new THREE.Vector3())
+        const size = item.entry.localBox.getSize(new THREE.Vector3())
+        rooms.push({
+          model: item.entry.model,
+          geoms: [plateFrom(item.entry.localBox)],
+          x: c.x, y: c.y, z: c.z,
+          hx: size.x / 2, hy: size.y / 2, hz: size.z / 2,
+          t: item.t,
+        })
       }
-      await Promise.all(Array.from({ length: Math.min(6, paint.length) }, () => paintOne()))
       if (seq !== heatSeq) return
       const stops = HEAT_STOPS[md] || HEAT_STOPS.temp
       const low = new THREE.Color(stops[0])
@@ -1412,6 +1485,21 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       syncGhost()
       const wake = engine.world?.renderer as { needsUpdate?: boolean } | undefined
       if (wake) wake.needsUpdate = true
+      /* The other floors fill the cache. Switching then paints from that, and
+         the floor you switch to is read first if it is not ready yet. */
+      const rest = jobs.filter(job => !located.has(job.bimId)).map(job => job.bimId)
+      if (rest.length && levelId !== 'ALL') {
+        const token = seq
+        void (async () => {
+          const floors = [...floorCatalog.keys()].filter(id => id !== levelId)
+          for (const id of floors) {
+            if (token !== heatSeq) return
+            const ids = await guidsForFloor(id, new Set(rest))
+            await locateMany([...ids])
+          }
+          if (token === heatSeq) await locateMany(rest)
+        })()
+      }
     }
 
     // Same rule as isAlarmed

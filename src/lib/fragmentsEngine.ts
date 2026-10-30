@@ -817,7 +817,8 @@ export async function initFragmentsEngine(
     if (grid) grid.visible = false
 
     // ── Surfaces ────────────────────────────────────────────────────────────
-    void hideNonPhysical()
+    /* Not while files are still parsing. The category scan uses the same worker. */
+    if (!useLoadingProgressStore.getState().sessionActive) void hideNonPhysical()
     for (const material of fragments.models.materials.list.values()) {
       dressMaterial(material as THREE.Material, surfaces, templateEnv, templateBase)
     }

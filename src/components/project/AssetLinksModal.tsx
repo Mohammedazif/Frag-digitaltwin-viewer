@@ -22,7 +22,7 @@ import {
   type ModelElement,
   type Suggestion,
 } from '@/lib/assetLinks'
-import { defaultSpaceModelKeys, guidsInModels, listModelElements, listScannedModels, type ScannedModel } from '@/lib/modelElements'
+import { defaultSpaceModelKeys, guidsInModel, guidsInModels, listModelElements, listScannedModels, type ScannedModel } from '@/lib/modelElements'
 
 interface AssetLinksModalProps {
   visible: boolean
@@ -97,6 +97,7 @@ function AssetLinksDialog({ initial, projectName, onClose, engineRef }: AssetLin
   const [manualGuid, setManualGuid] = useState('')
   const [modelChoices, setModelChoices] = useState<ScannedModel[]>([])
   const [pickedKeys, setPickedKeys] = useState<string[]>([])
+  const [savedByModel, setSavedByModel] = useState<Record<string, string[]>>({})
   const spacePick = useRef<string[] | null>(null)
   const [importText, setImportText] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -212,6 +213,29 @@ function AssetLinksDialog({ initial, projectName, onClose, engineRef }: AssetLin
 
   const equipLinks = useMemo(() => links.filter(l => l.kind !== 'space'), [links])
   const spaceLinks = useMemo(() => links.filter(l => l.kind === 'space'), [links])
+  const spaceGuidKey = useMemo(() => spaceLinks.map(l => l.guid).sort().join(','), [spaceLinks])
+  useEffect(() => {
+    if (mode !== 'space' || loadingModels) return
+    const engine = engineRef.current
+    const guids = spaceGuidKey ? spaceGuidKey.split(',') : []
+    if (!engine || !guids.length || !modelChoices.length) {
+      setSavedByModel({})
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      const next: Record<string, string[]> = {}
+      for (const choice of modelChoices) {
+        try {
+          const found = await guidsInModel(engine, choice.key, guids)
+          if (found.length) next[choice.key] = found
+        } catch { /* this file is not ready to answer */ }
+        if (cancelled) return
+      }
+      if (!cancelled) setSavedByModel(next)
+    })()
+    return () => { cancelled = true }
+  }, [mode, loadingModels, spaceGuidKey, modelChoices, engineRef])
 
   const guidKey = useMemo(() => [...new Set(links.map(l => l.guid))].sort().join(','), [links])
   useEffect(() => {
@@ -374,6 +398,18 @@ function AssetLinksDialog({ initial, projectName, onClose, engineRef }: AssetLin
   }
 
   const unlinkSpace = (guid: string) => setLinks(prev => prev.filter(l => !(l.kind === 'space' && l.guid === guid)))
+  const unlinkAllSpaces = () => {
+    const n = links.filter(l => l.kind === 'space').length
+    if (!n) return
+    setLinks(prev => prev.filter(l => l.kind !== 'space'))
+    setNotice(`Removed ${n} rooms. Save to keep this.`)
+  }
+  const removeSpaces = (guids: string[]) => {
+    const drop = new Set(guids)
+    if (!drop.size) return
+    setLinks(prev => prev.filter(l => !(l.kind === 'space' && drop.has(l.guid))))
+    setNotice(`Removed ${drop.size} rooms. Save to keep this.`)
+  }
 
   const pickedGuid = (text: string | undefined): string | null => {
     const t = (text ?? '').trim()
@@ -462,11 +498,18 @@ function AssetLinksDialog({ initial, projectName, onClose, engineRef }: AssetLin
   const addedCount = spaceRows.filter(r => r.link).length
   const openCount = spaceRows.filter(r => !r.link).length
   const openByModel = new Map<string, ModelElement[]>()
+  const addedByModel = new Map<string, string[]>()
   for (const row of spaceRows) {
-    if (!row.el || row.link) continue
-    const list = openByModel.get(row.el.modelName) ?? []
-    list.push(row.el)
-    openByModel.set(row.el.modelName, list)
+    if (!row.el) continue
+    if (!row.link) {
+      const list = openByModel.get(row.el.modelName) ?? []
+      list.push(row.el)
+      openByModel.set(row.el.modelName, list)
+    } else {
+      const list = addedByModel.get(row.el.modelName) ?? []
+      list.push(row.guid)
+      addedByModel.set(row.el.modelName, list)
+    }
   }
 
   const scanText = loadingModels
@@ -540,6 +583,7 @@ function AssetLinksDialog({ initial, projectName, onClose, engineRef }: AssetLin
               <span>Scrape from</span>
               {modelChoices.length ? modelChoices.map(m => {
                 const pending = openByModel.get(m.name) ?? []
+                const inFile = [...new Set([...(savedByModel[m.key] ?? []), ...(addedByModel.get(m.name) ?? [])])]
                 return (
                   <span key={m.key} className="al-model">
                     <label>
@@ -562,6 +606,15 @@ function AssetLinksDialog({ initial, projectName, onClose, engineRef }: AssetLin
                         Add all {pending.length}
                       </button>
                     )}
+                    <button
+                      type="button"
+                      className="ds-btn ds-btn-secondary al-small"
+                      disabled={!inFile.length}
+                      title="Removes the saved rooms that are in this file. Save to keep this."
+                      onClick={() => removeSpaces(inFile)}
+                    >
+                      Remove all {inFile.length}
+                    </button>
                   </span>
                 )
               }) : <span>No model is loaded.</span>}
@@ -618,6 +671,26 @@ function AssetLinksDialog({ initial, projectName, onClose, engineRef }: AssetLin
                 title="Adds every room scraped from the ticked models. Rooms already added keep their names."
               >
                 Add all {openCount} from ticked models
+              </button>
+            )}
+            {mode === 'space' && (
+              <button
+                className="ds-btn ds-btn-secondary al-small"
+                onClick={unlinkAllSpaces}
+                disabled={!spaceLinks.length}
+                title="Removes every saved room from the heatmap. Save to keep this."
+              >
+                Remove all {spaceLinks.length}
+              </button>
+            )}
+            {mode === 'space' && (
+              <button
+                className="ds-btn ds-btn-secondary al-small"
+                onClick={rescan}
+                disabled={scan.state === 'scanning' || loadingModels}
+                title="Reads the ticked models again. Saved rooms stay until you add or remove them."
+              >
+                {scan.state === 'scanning' ? 'Reading…' : spaceLinks.length || elements ? 'Rescan' : 'Scan'}
               </button>
             )}
             <button className="ds-btn ds-btn-secondary al-small" onClick={() => setImportText(importText === null ? '' : null)}>Import</button>
@@ -748,7 +821,7 @@ function AssetLinksDialog({ initial, projectName, onClose, engineRef }: AssetLin
                       <td><span className={`al-status al-${st.tone}`}>{st.text}</span></td>
                       <td>
                         {row.link
-                          ? <button className="ds-btn ds-btn-secondary al-small" onClick={() => unlinkSpace(row.guid)}>Unlink</button>
+                          ? <button className="ds-btn ds-btn-secondary al-small" onClick={() => unlinkSpace(row.guid)}>Remove</button>
                           : <button className="ds-btn ds-btn-secondary al-small" disabled={!row.el} onClick={() => row.el && addSpace(row.el)}>Add</button>}
                       </td>
                     </tr>
