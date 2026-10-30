@@ -82,7 +82,7 @@ function HeatmapPane({
         Fill linked rooms when FIN has no reading
       </label>
       <p className="ds-hint">
-        Each linked room gets its own sample sensor: temperature, humidity, and CO2. You do not rename the rooms. A real FIN reading replaces the sample on that room. Marsa has no linked rooms, so its heatmap stays on the FIN feed. Turn this off to draw only rooms you name IS-01 or IAQ-02.
+        Linked rooms share seven sample sensors, S-01 to S-07. Rooms on one sensor use the same temperature, humidity, and CO2, so the view does not colour every room on its own. You do not rename the rooms. A real FIN reading is kept. Marsa has no linked rooms, so its heatmap stays on the FIN feed. Turn this off to draw only rooms you name IS-01 or IAQ-02.
       </p>
 
       <h3 className="ds-section-title" style={{ marginTop: 24 }}>View</h3>

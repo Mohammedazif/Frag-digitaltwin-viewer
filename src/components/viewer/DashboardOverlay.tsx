@@ -1219,6 +1219,42 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       mesh.renderOrder = 2
       return mesh
     }
+    /* One colour for the whole room. Used when many rooms share a few sensors,
+       so the view does not blend every room against every other room. */
+    const paintFlatPlate = (
+      geom: THREE.BufferGeometry,
+      own: { x: number; y: number; z: number; hx: number; hy: number; hz: number },
+      color: THREE.Color,
+      inset: boolean,
+    ) => {
+      const g = geom.getIndex() ? geom.toNonIndexed() : geom.clone()
+      const pos = g.getAttribute('position') as THREE.BufferAttribute
+      const sx = own.hx > 0.08 ? Math.max((own.hx - 0.05) / own.hx, 0.85) : 1
+      const sz = own.hz > 0.08 ? Math.max((own.hz - 0.05) / own.hz, 0.85) : 1
+      const sy = inset && own.hy > 0.05 ? Math.max(1 - Math.min(0.45, own.hy * 0.45) / own.hy, 0.55) : 1
+      const drop = inset ? (1 - sy) * own.hy * 0.85 : 0
+      for (let i = 0; i < pos.count; i++) {
+        pos.setX(i, own.x + (pos.getX(i) - own.x) * sx)
+        pos.setY(i, own.y + (pos.getY(i) - own.y) * sy - drop)
+        pos.setZ(i, own.z + (pos.getZ(i) - own.z) * sz)
+      }
+      pos.needsUpdate = true
+      const colors = new Float32Array(pos.count * 4)
+      for (let i = 0; i < pos.count; i++) {
+        const o = i * 4
+        colors[o] = color.r
+        colors[o + 1] = color.g
+        colors[o + 2] = color.b
+        colors[o + 3] = 0.55
+      }
+      g.setAttribute('color', new THREE.BufferAttribute(colors, 4))
+      g.computeBoundingBox()
+      g.computeBoundingSphere()
+      const mesh = new THREE.Mesh(g, heatPlateMat())
+      mesh.frustumCulled = false
+      mesh.renderOrder = 2
+      return mesh
+    }
     const applySpaceHeat = async (zones: { bimId?: string; bimIds?: string[]; tempC?: number | null; rh?: number | null; co2?: number | null }[], mode?: string) => {
       spaceHeatActive = true
       applySpacesGate()
@@ -1258,20 +1294,27 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
         byModel.set(room.model, list)
       }
       byModel.forEach((samples, model) => {
-        let near = 0, nearN = 0
-        for (let i = 0; i < samples.length; i++) {
-          let best = Infinity
-          for (let j = 0; j < samples.length; j++) {
-            if (i === j) continue
-            best = Math.min(best, Math.hypot(samples[i].x - samples[j].x, samples[i].z - samples[j].z))
+        const many = samples.length > 24
+        let sigma = 1
+        if (!many) {
+          let near = 0, nearN = 0
+          for (let i = 0; i < samples.length; i++) {
+            let best = Infinity
+            for (let j = 0; j < samples.length; j++) {
+              if (i === j) continue
+              best = Math.min(best, Math.hypot(samples[i].x - samples[j].x, samples[i].z - samples[j].z))
+            }
+            if (isFinite(best) && best > 0) { near += best; nearN++ }
           }
-          if (isFinite(best) && best > 0) { near += best; nearN++ }
+          sigma = Math.max(nearN ? (near / nearN) * 0.85 : 1, 0.5)
         }
-        const sigma = Math.max(nearN ? (near / nearN) * 0.85 : 1, 0.5)
         const root = heatRootOf(model)
         for (const room of samples) {
+          const tint = many ? low.clone().lerp(high, room.t) : null
           for (const geom of room.geoms) {
-            const mesh = paintRoomPlate(geom, room, samples, sigma, low, high, inside)
+            const mesh = many && tint
+              ? paintFlatPlate(geom, room, tint, inside)
+              : paintRoomPlate(geom, room, samples, sigma, low, high, inside)
             root.add(mesh)
             heatSheets.push(mesh)
           }

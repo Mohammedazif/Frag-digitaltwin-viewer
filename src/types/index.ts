@@ -266,7 +266,7 @@ export interface HeatmapSetup {
   /** Pull the colour in under the ceiling so it reads inside the walls. */
   insideWalls?: boolean
   /**
-   * Sample temperature and humidity for linked rooms that have no FIN reading.
+   * Sample readings for linked rooms that have no FIN value. The rooms share seven sensors.
    * Absent is on. Set false to colour only rooms named IS-01 or IAQ-02.
    * Marsa has no space links, so its rooms are never filled. A real FIN reading is kept.
    */

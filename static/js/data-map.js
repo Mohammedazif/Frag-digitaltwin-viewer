@@ -2206,6 +2206,9 @@
     return !h || h.sampleSpaces !== false;
   }
 
+  /* Hospital rooms share these sensors. One zone per sensor, not one zone per room. */
+  var SAMPLE_SENSOR_COUNT = 7;
+
   function sampleIndex(key) {
     var m = String(key || '').match(/(\d+)/);
     var n = m ? parseInt(m[1], 10) : 1;
@@ -2217,6 +2220,13 @@
     var n = 0;
     for (var i = 0; i < s.length; i++) n = (n + s.charCodeAt(i) * (i + 1)) % 97;
     return (n % 9) + 1;
+  }
+
+  function sampleBucket(guid) {
+    var s = String(guid || '');
+    var n = 0;
+    for (var i = 0; i < s.length; i++) n = (n + s.charCodeAt(i) * (i + 1)) % 97;
+    return n % SAMPLE_SENSOR_COUNT;
   }
 
   /* Inside the legend bands: 21–25 °C, 40–80 %, 600–1200 ppm. Not the old Marsa room table. */
@@ -2258,9 +2268,9 @@
       for (var i = 0; i < ids.length; i++) if (guids[ids[i]]) linked = true;
       if (!linked) return;
       var key = sensorKey(z.nameEn);
-      var n = key ? sampleIndex(key) : sampleIndexFromGuid(z.bimId || ids[0]);
-      var tag = key || String(z.bimId || ids[0] || z.nameEn);
-      /* The sample is the sensor. The saved room name stays as it is. */
+      var n = key ? sampleIndex(key) : sampleIndexFromGuid(z.nameEn || z.bimId || ids[0]);
+      var tag = key || z.nameEn || String(z.bimId || ids[0]);
+      /* One reading for every room on this sensor. */
       z.sample = true;
       if (!finiteNum(z.liveTemp)) {
         z.liveTemp = sampleTemp(n);
@@ -2322,20 +2332,38 @@
     zones.forEach(function (z) {
       (z.bimIds || []).forEach(function (id) { if (id) usedGuid[id] = true; });
     });
-    /* Sample readings colour every linked room. With samples off, only a sensor name is a zone. */
+    /* Unnamed rooms share S-01..S-07. A room already named IS-01 or IAQ-02 stays on that sensor. */
     linkedSpaces.forEach(function (l) {
       if (!l || !l.guid || usedGuid[l.guid]) return;
       var key = sensorKey(l.name);
       if (!key && !sampleSpacesOn()) return;
       usedGuid[l.guid] = true;
-      var kind = key && key.indexOf('IAQ') === 0 ? 'iaq' : 'is';
-      zones.push({
-        nameEn: l.name, nameAr: l.name, floor: '', kind: kind,
-        tempC: null, rh: null, co2: null, hours: [],
-        bimId: l.guid,
-        bimIds: [l.guid],
-        spaceName: l.element || l.name
-      });
+      var z;
+      if (key) {
+        z = byKey[key];
+        if (!z) {
+          z = blankZone(key);
+          zones.push(z);
+          byKey[key] = z;
+        }
+      } else {
+        var skey = 'S-' + String(sampleBucket(l.guid) + 1).padStart(2, '0');
+        z = byKey[skey];
+        if (!z) {
+          z = {
+            nameEn: skey, nameAr: skey, floor: '', kind: 'is',
+            tempC: null, rh: null, co2: null, hours: [],
+            bimId: l.guid, bimIds: [],
+            spaceName: skey, sample: true
+          };
+          zones.push(z);
+          byKey[skey] = z;
+        }
+      }
+      if (z.bimIds.indexOf(l.guid) < 0) z.bimIds.push(l.guid);
+      if (!z.bimId) z.bimId = l.guid;
+      z.bimIds.forEach(function (id) { if (id) usedGuid[id] = true; });
+      if (sampleSpacesOn()) z.sample = true;
     });
     /* Hospital check values. On unless sampleSpaces is saved false.
        Marsa's SPACE_GUID rooms are built only when there are no space links, and this

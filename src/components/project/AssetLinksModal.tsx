@@ -464,7 +464,7 @@ function AssetLinksDialog({ initial, projectName, onClose, engineRef }: AssetLin
 
           <p className="ds-hint" style={{ marginTop: 0 }}>
             {mode === 'space'
-              ? 'Adds IfcSpace rooms for the heatmap by IFC GlobalId. Tick which models to scrape. A file with “space” in its name starts ticked, so rooms from the other models stay out until you tick them. Sample sensors are added to these rooms for you. Leave the heatmap name as the room name. Type IS-01 or IAQ-02 only when a real FIN sensor should replace the sample on that one room.'
+              ? 'Adds IfcSpace rooms for the heatmap by IFC GlobalId. Tick which models to scrape. A file with “space” in its name starts ticked, so rooms from the other models stay out until you tick them. These rooms share seven sample sensors. Leave the heatmap name as the room name. Type IS-01 or IAQ-02 only when a real FIN sensor should take that one room.'
               : 'Links each FIN equipment to its model element by IFC GlobalId. A revised model keeps its GlobalIds, so the links carry over; any that do not are listed as Not in model.'}
           </p>
 
