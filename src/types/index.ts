@@ -265,6 +265,11 @@ export interface HeatmapSetup {
   fadeAmount?: number
   /** Pull the colour in under the ceiling so it reads inside the walls. */
   insideWalls?: boolean
+  /**
+   * Sample temperature, humidity, and CO2 for linked sensor rooms that have no FIN reading.
+   * Absent is off. Marsa's rooms are never filled, and a real FIN reading is kept.
+   */
+  sampleSpaces?: boolean
 }
 
 /** Per-project FIN settings live here. A field a project does not set falls back to the

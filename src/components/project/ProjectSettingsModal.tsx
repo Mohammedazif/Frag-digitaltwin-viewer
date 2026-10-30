@@ -65,6 +65,26 @@ function HeatmapPane({
         Save, then open the heatmap. Leave this as it is and the project keeps the top view of the ground floor, with the models as they are.
       </p>
 
+      <h3 className="ds-section-title" style={{ marginTop: 24 }}>Sample readings</h3>
+      <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0', fontSize: 13 }}>
+        <input
+          type="checkbox"
+          checked={current.sampleSpaces === true}
+          onChange={e => {
+            if (e.target.checked) patch({ sampleSpaces: true })
+            else {
+              const next = { ...current }
+              delete next.sampleSpaces
+              onChange(next)
+            }
+          }}
+        />
+        Fill linked sensor rooms when FIN has no reading
+      </label>
+      <p className="ds-hint">
+        For a hospital project that has no live readings yet. A room named IS-01 gets a sample temperature and humidity. A room named IAQ-02 gets a sample CO2. Ranking and the hourly cells fill from that sample. A real FIN reading is kept. Marsa is left alone unless this box is ticked and saved. Rooms that are not sensors are still not drawn.
+      </p>
+
       <h3 className="ds-section-title" style={{ marginTop: 24 }}>View</h3>
       <div className="al-filters" style={{ marginBottom: 12 }}>
         <button type="button" className={`ds-toggle-btn ${current.camera !== 'inside' ? 'active' : ''}`} onClick={() => patch({ camera: 'top' })}>Top view</button>

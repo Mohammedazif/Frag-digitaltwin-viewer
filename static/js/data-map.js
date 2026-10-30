@@ -2196,6 +2196,90 @@
     return n + 'F';
   }
 
+  function finiteNum(n) {
+    return typeof n === 'number' && isFinite(n);
+  }
+
+  /* Opt-in on this project's heatmap settings. Absent is off, so Marsa never grows sample points. */
+  function sampleSpacesOn() {
+    var h = window.INJECTED_PROJECT_CONFIG && window.INJECTED_PROJECT_CONFIG.heatmap;
+    return !!(h && h.sampleSpaces === true);
+  }
+
+  function sampleIndex(key) {
+    var m = String(key || '').match(/(\d+)/);
+    var n = m ? parseInt(m[1], 10) : 1;
+    return isFinite(n) && n > 0 ? n : 1;
+  }
+
+  /* Inside the legend bands: 21–25 °C, 40–80 %, 600–1200 ppm. Not the old Marsa room table. */
+  function sampleTemp(n) { return Math.round((21 + ((n - 1) % 9) * 0.5) * 10) / 10; }
+  function sampleRh(n) { return 40 + ((n - 1) % 9) * 5; }
+  function sampleCo2(n) { return 600 + ((n - 1) % 13) * 50; }
+
+  function seedSampleHistory(id, base) {
+    if (!id || heatHist[id]) return;
+    var days = {};
+    var today = new Date();
+    today.setHours(0, 0, 0, 0);
+    var span = base >= 100 ? 40 : (base >= 30 ? 3 : 0.4);
+    for (var i = 0; i < 30; i++) {
+      var day = new Date(today);
+      day.setDate(today.getDate() - i);
+      var slots = [];
+      for (var b = 0; b < 8; b++) {
+        var wobble = Math.sin((i + 1) * 0.35 + b * 0.8) * span;
+        var v = base + wobble;
+        slots.push(base >= 30 ? Math.round(v) : Math.round(v * 10) / 10);
+      }
+      var sum = 0;
+      for (var s = 0; s < slots.length; s++) sum += slots[s];
+      days[ymd(day)] = { v: sum / slots.length, slots: slots };
+    }
+    heatHist[id] = { pending: false, days: days };
+  }
+
+  function fillSampleReadings(zones, links) {
+    if (!sampleSpacesOn() || !links || !links.length) return;
+    var guids = {};
+    links.forEach(function (l) {
+      if (l && l.guid && sensorKey(l.name)) guids[l.guid] = true;
+    });
+    zones.forEach(function (z) {
+      var ids = z.bimIds && z.bimIds.length ? z.bimIds : (z.bimId ? [z.bimId] : []);
+      var linked = false;
+      for (var i = 0; i < ids.length; i++) if (guids[ids[i]]) linked = true;
+      if (!linked) return;
+      var key = sensorKey(z.nameEn);
+      if (!key) return;
+      var n = sampleIndex(key);
+      if (z.kind === 'is') {
+        if (!finiteNum(z.liveTemp)) {
+          z.liveTemp = sampleTemp(n);
+          if (!z.tempId) {
+            z.tempId = 'sample:' + key + ':temp';
+            seedSampleHistory(z.tempId, z.liveTemp);
+          }
+        }
+        if (!finiteNum(z.liveRh)) {
+          z.liveRh = sampleRh(n);
+          if (!z.rhId) {
+            z.rhId = 'sample:' + key + ':rh';
+            seedSampleHistory(z.rhId, z.liveRh);
+          }
+        }
+      } else if (z.kind === 'iaq') {
+        if (!finiteNum(z.liveCo2)) {
+          z.liveCo2 = sampleCo2(n);
+          if (!z.co2Id) {
+            z.co2Id = 'sample:' + key + ':co2';
+            seedSampleHistory(z.co2Id, z.liveCo2);
+          }
+        }
+      }
+    });
+  }
+
   function applyHeat(list) {
     if (Array.isArray(list)) heatEquip = list;
     var site = window.EKO_DATA && window.EKO_DATA.marsa;
@@ -2248,6 +2332,10 @@
         spaceName: l.element || l.name
       });
     });
+    /* Hospital check values only. Off unless this project saved heatmap.sampleSpaces.
+       Marsa's SPACE_GUID rooms are built only when there are no space links, and this
+       returns before touching them. A live FIN number is never replaced. */
+    fillSampleReadings(zones, linkedSpaces);
     zones.sort(function (a, b) { return a.nameEn.localeCompare(b.nameEn, undefined, { numeric: true }); });
     zones.forEach(function (z, i) {
       z.rect = [10 + (i % 4) * 22, 16 + Math.floor(i / 4) * 22, 18, 16];
