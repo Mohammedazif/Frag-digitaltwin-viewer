@@ -934,15 +934,23 @@
   E.dropSelection = () => Object.assign(E.state, NO_SEL);
   /* The model as the viewer opens it: camera, floors, layers, tools, heat colours and selection. Mutate only. */
   E.resetModel = () => {
+    E.releaseHeatView();
+    const en = E.engine;
+    ['clearHighlight', 'clearMeasure', 'clearSection'].forEach(k => { if(typeof en[k] === 'function') en[k](); });
+    E.dropSelection();
+  };
+  /* Overview keeps the project camera from Save Camera & Render View.
+     The heatmap's own camera and floor stay on that page only. */
+  E.releaseHeatView = () => {
     const en = E.engine, H = window.EKO_HOST_ENGINE;
     if(H && typeof H.clearSpaceHeat === 'function') H.clearSpaceHeat();
     E.state._heatOn = false;
-    ['clearHighlight', 'clearMeasure', 'clearSection'].forEach(k => { if(typeof en[k] === 'function') en[k](); });
-    if(en.isolateLevel) en.isolateLevel('ALL', true);
-    if(en.setLayerVisibility) en.setLayerVisibility('all', true);
-    if(en.resetView) en.resetView();
-    Object.assign(E.state.dock, { tool: null, slice: false, bloom: null, level: 'ALL', floorAlone: false, layer: 'all' });
-    E.dropSelection();
+    E.state._heatViewed = false;
+    if(en && en.fadeArch) en.fadeArch(false);
+    if(en && en.isolateLevel) en.isolateLevel('ALL', true);
+    if(en && en.setLayerVisibility) en.setLayerVisibility('all', true);
+    if(en && en.resetView) en.resetView();
+    if(E.state.dock) Object.assign(E.state.dock, { level: 'ALL', floorAlone: false, layer: 'all', layerContext: false });
   };
   /* close=true dismisses the floor menu (a pick). The stepper leaves it open. */
   function showLevel(id, close){
@@ -1623,6 +1631,8 @@
   E.state.disclose = loadDisclose();
   try{ const u = new URL(location.href); if(u.searchParams.get('display') === 'wall'){ E.state.wall = true; E.state.wallOpt = { scope: u.searchParams.get('scope') || null, distance: u.searchParams.get('distance'), dwell: u.searchParams.get('dwell'), brightness: u.searchParams.get('brightness'), motion: u.searchParams.get('motion'), shifts: u.searchParams.get('shifts'), scale: u.searchParams.get('scale'), panel: u.searchParams.get('panel'), panelIn: u.searchParams.get('panelIn'), theme: u.searchParams.get('theme'), lock: u.searchParams.get('lock'), id: u.searchParams.get('id') || 'default', viaTab: u.searchParams.get('via') === 'tab' }; if(window.EKO_WALL) window.EKO_WALL.start(E); } }catch(e){}   /* D106 */
   applyTheme(); applyLang(); E.state.born = 'boot'; render();
+  /* A reload opens Overview. Leave the heatmap camera and its floor behind. */
+  if(!E.state.wall && E.state.pageId !== 'heatmap') E.releaseHeatView();
   try{ const op = new URL(location.href).searchParams.get('open'); if(op && !E.state.wall){ const [kind, id] = op.split(':'); if(kind === 'asset' && id) ACTS.openAsset({ dataset: { asset: id } }); else if(kind === 'site' && id && window.EKO_PF) window.EKO_PF.ACTS.siteGo({ dataset: { site: id } }); } }catch(e){}   /* D111: the wall hands a row to the workstation */
   if(window.EKO_NOTIF){
     window.EKO_NOTIF.hooks.onAdd = () => { render(); };

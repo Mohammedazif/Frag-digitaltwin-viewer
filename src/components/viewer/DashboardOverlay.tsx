@@ -82,6 +82,7 @@ function loadScripts(scripts: HTMLScriptElement[], signal: { mounted: boolean })
 export function DashboardOverlay({ visible, engineRef, engineReady = false }: DashboardOverlayProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const labelHostRef = useRef<HTMLDivElement>(null)
+  const savedSettings = useRef<object | undefined>(undefined)
   const currentProject = useProjectStore(s => s.currentProject)
   const templateId = useAppStore(s => s.templateId)
   const xrayColor = useAppStore(s => s.xrayColor)
@@ -705,6 +706,24 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
     let levelSeq = 0
     const floorJobs = new WeakMap<object, Promise<LevelIndex>>()
     const floorCatalog = new Map<string, Floor>()
+    /* World-Y samples per storey, so the heat colour follows the open floor
+       and not a roof that happens to be the highest box. */
+    const floorSamples = new Map<string, number[]>()
+    const noteFloorBoxes = (floorId: string, ids: number[], boxOf: Map<number, THREE.Box3>) => {
+      let list = floorSamples.get(floorId)
+      if (!list) floorSamples.set(floorId, list = [])
+      for (const id of ids) {
+        const b = boxOf.get(id)
+        if (!b || b.isEmpty() || !Number.isFinite(b.min.y) || !Number.isFinite(b.max.y)) continue
+        list.push(b.min.y, b.max.y)
+      }
+    }
+    const spanOf = (floorId: string) => {
+      const list = floorSamples.get(floorId)
+      if (!list || list.length < 4) return null
+      const ys = list.slice().sort((a, b) => a - b)
+      return { yLo: ys[Math.floor(ys.length * 0.05)], yHi: ys[Math.floor(ys.length * 0.95)] }
+    }
     const ORDINALS = ['Ground floor', 'First floor', 'Second floor', 'Third floor', 'Fourth floor', 'Fifth floor', 'Sixth floor', 'Seventh floor', 'Eighth floor', 'Ninth floor', 'Tenth floor', 'Eleventh floor', 'Twelfth floor', 'Thirteenth floor', 'Fourteenth floor', 'Fifteenth floor', 'Sixteenth floor', 'Seventeenth floor', 'Eighteenth floor', 'Nineteenth floor', 'Twentieth floor']
     const attrText = (row: any, key: string) => {
       const v = row?.[key]
@@ -866,6 +885,9 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
             byFloor.get(floorId)!.push(...ids)
           }
         }
+        const boxOfFloor = new Map<number, THREE.Box3>()
+        geom.forEach((id, i) => { if (boxes[i]) boxOfFloor.set(id, boxes[i]) })
+        for (const [floorId, ids] of byFloor) noteFloorBoxes(floorId, ids, boxOfFloor)
         /* What the floor filter treats specially: the ceilings, and the HVAC. A model that cannot
            answer leaves both empty, which is the plain floor filter. */
         const ceilings = new Set<number>()
@@ -953,7 +975,15 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
         levelHidden.set(m, new Set(hide))
         await setHidden(m, 'level', hide)
       }
-      if (seq === levelSeq) repositionMarkers()
+      if (seq === levelSeq) {
+        repositionMarkers()
+        /* The floor hide lands after the colour pass has started. Paint again
+           for the storey that is actually open. */
+        if (spaceHeatActive && heatReq) {
+          heatSig = ''
+          void applySpaceHeat(heatReq.zones, heatReq.mode)
+        }
+      }
     }
 
     /* The Spaces model is the heat map's: hidden in normal viewing, shown while the heat map is applied.
@@ -973,6 +1003,8 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
     const heatByBim = new Map<string, { mat: THREE.MeshBasicMaterial; model: any; localId: number }>()
     let heatSheets: THREE.Mesh[] = []
     let heatSig = ''
+    let heatSeq = 0
+    let heatReq: { zones: { bimId?: string; bimIds?: string[]; tempC?: number | null; rh?: number | null; co2?: number | null }[]; mode?: string } | null = null
     /* Colour sits in the room and is tested against the building, so a ceiling does not hide it from an angled view. */
     let heatInsideWalls = false
     const heatInsideOf = () => {
@@ -1005,10 +1037,20 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       })
       if (!tops.length) { drop(); return }
       tops.sort((a, b) => a - b)
-      const hi = tops[tops.length - 1]
-      const band = tops.filter(y => y >= hi - 2.5)
-      const open = band.length ? band[0] : hi
-      heatClip.set(new THREE.Vector3(0, 1, 0), -(open + 0.08))
+      /* The busiest band is this floor. One high box must not lift the cut. */
+      let bestHi = 0
+      let bestN = 0
+      let lo = 0
+      for (let hi = 0; hi < tops.length; hi++) {
+        while (tops[hi] - tops[lo] > 1.5) lo++
+        const n = hi - lo + 1
+        if (n >= bestN) { bestN = n; bestHi = hi }
+      }
+      const openTop = tops[bestHi]
+      /* normal (0,-1,0), constant openTop+0.08. distance = openTop+0.08 - y.
+         Clipped only above the colour: the colour stays, a ceiling 1m above goes.
+         Holds for a top-down camera and an angled one. */
+      heatClip.set(new THREE.Vector3(0, -1, 0), openTop + 0.08)
       if (planes.indexOf(heatClip) < 0) planes.push(heatClip)
     }
     /* Two colours per category so the low end and the high end stay distinct.
@@ -1032,6 +1074,13 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       overlay.add(root)
       heatRoots.set(model, root)
       return root
+    }
+    const boxFrom = (localBox: THREE.Box3) => {
+      const size = localBox.getSize(new THREE.Vector3())
+      const center = localBox.getCenter(new THREE.Vector3())
+      const box = new THREE.BoxGeometry(Math.max(size.x, 0.2), Math.max(size.y, 0.2), Math.max(size.z, 0.2))
+      box.translate(center.x, center.y, center.z)
+      return box
     }
     const geomsFor = async (bimId: string, entry: Located) => {
       const hit = heatGeoms.get(bimId)
@@ -1072,6 +1121,8 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       heatSheets = []
     }
     const clearSpaceHeat = async () => {
+      heatSeq++
+      heatReq = null
       spaceHeatActive = false
       heatInsideWalls = false
       syncHeatClip()
@@ -1256,33 +1307,71 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       return mesh
     }
     const applySpaceHeat = async (zones: { bimId?: string; bimIds?: string[]; tempC?: number | null; rh?: number | null; co2?: number | null }[], mode?: string) => {
+      heatReq = { zones, mode }
       spaceHeatActive = true
       applySpacesGate()
       const inside = heatInsideOf()
       heatInsideWalls = inside
-      syncHeatClip()
       const md = mode === 'comfort' || mode === 'hum' ? mode : 'temp'
+      const levelId = ((window as any).EKO?.state?.dock?.level as string) || 'ALL'
+      const span = levelId !== 'ALL' ? spanOf(levelId) : null
       const idsOf = (z: { bimId?: string; bimIds?: string[] }) =>
         (z.bimIds && z.bimIds.length ? z.bimIds : (z.bimId ? [z.bimId] : [])).filter(id => isGuid(id))
-      const sig = (inside ? 'in|' : 'out|') + md + '|' + (zones || []).map(z => `${idsOf(z).join(',')}:${round1(z.tempC)}:${round1(z.rh)}:${round1(z.co2)}`).join(';')
-      if (sig === heatSig) return
-      heatSig = sig
-      dropHeatSheets()
-      type Room = { model: any; geoms: THREE.BufferGeometry[]; x: number; y: number; z: number; hx: number; hy: number; hz: number; t: number }
-      const rooms: Room[] = []
+      const jobs: { bimId: string; t: number }[] = []
       for (const z of zones || []) {
         const raw = md === 'comfort' ? z.co2 : md === 'hum' ? z.rh : z.tempC
         const t = heatT(md, raw == null ? null : Number(raw))
         if (t == null) continue
-        for (const bimId of idsOf(z)) {
-          const entry = await locate(bimId)
+        for (const bimId of idsOf(z)) jobs.push({ bimId, t })
+      }
+      const sig = (inside ? 'in|' : 'out|') + levelId + '|' + (span ? `${round1(span.yLo)}:${round1(span.yHi)}` : '-') + '|' + md + '|' + jobs.map(j => `${j.bimId}:${round1(j.t)}`).join(';')
+      if (sig === heatSig) return
+      const seq = ++heatSeq
+      heatSig = sig
+      dropHeatSheets()
+      type Found = { entry: Located; t: number; bimId: string }
+      const found: Found[] = []
+      let cursor = 0
+      const take = async () => {
+        while (cursor < jobs.length) {
+          const job = jobs[cursor++]
+          const entry = await locate(job.bimId)
           if (!entry?.localBox || entry.localBox.isEmpty()) continue
-          const geoms = await geomsFor(bimId, entry)
-          if (!geoms.length) continue
-          const c = entry.localBox.getCenter(new THREE.Vector3())
-          const size = entry.localBox.getSize(new THREE.Vector3())
-          rooms.push({ model: entry.model, geoms, x: c.x, y: c.y, z: c.z, hx: size.x / 2, hy: size.y / 2, hz: size.z / 2, t })
+          found.push({ entry, t: job.t, bimId: job.bimId })
         }
+      }
+      await Promise.all(Array.from({ length: Math.min(8, jobs.length) }, () => take()))
+      if (seq !== heatSeq) return
+      const onOpen = (entry: Located) => {
+        if (levelId === 'ALL') return true
+        const hidden = levelHidden.get(entry.model)
+        if (hidden) return !hidden.has(entry.localId)
+        if (!span) return true
+        entry.model.object.updateMatrixWorld(true)
+        const y = entry.localBox.getCenter(new THREE.Vector3()).applyMatrix4(entry.model.object.matrixWorld).y
+        return y >= span.yLo - 1 && y <= span.yHi + 1
+      }
+      const openFound = found.filter(item => onOpen(item.entry))
+      /* A real floor test that matches nothing stays empty. Painting every
+         storey would put the ceiling cut on the wrong floor and hide the model. */
+      const tested = levelId !== 'ALL' && (!!span || found.some(item => levelHidden.has(item.entry.model)))
+      const use = tested ? openFound : found
+      /* Hundreds of rooms: a box from the space bounds, not each IfcSpace mesh.
+         Pulling every mesh is what froze the browser before any colour appeared. */
+      const many = use.length > 24
+      type Room = { model: any; geoms: THREE.BufferGeometry[]; x: number; y: number; z: number; hx: number; hy: number; hz: number; t: number }
+      const rooms: Room[] = []
+      for (const item of use) {
+        if (seq !== heatSeq) break
+        const geoms = many ? [boxFrom(item.entry.localBox)] : await geomsFor(item.bimId, item.entry)
+        if (!geoms.length) continue
+        const c = item.entry.localBox.getCenter(new THREE.Vector3())
+        const size = item.entry.localBox.getSize(new THREE.Vector3())
+        rooms.push({ model: item.entry.model, geoms, x: c.x, y: c.y, z: c.z, hx: size.x / 2, hy: size.y / 2, hz: size.z / 2, t: item.t })
+      }
+      if (seq !== heatSeq) {
+        if (many) for (const room of rooms) room.geoms.forEach(g => g.dispose())
+        return
       }
       const stops = HEAT_STOPS[md] || HEAT_STOPS.temp
       const low = new THREE.Color(stops[0])
@@ -1895,6 +1984,7 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
         ;(window as any).EKO_HOST_ENGINE?.bindWallOrbit?.()
       } catch { /* restore canvas orbit */ }
       // The selection dies with the dashboard: don't leave its equipment coloured
+      try { (window as any).EKO_HOST_ENGINE?.clearSpaceHeat?.() } catch {}
       try { (window as any).EKO_HOST_ENGINE?.clearHighlight?.() } catch {}
       try { (window as any).DashboardOverlayTeardown?.() } catch {}
       try { (window as any).DashboardData?.stop?.() } catch {}
@@ -1902,7 +1992,36 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       if (containerRef.current) containerRef.current.innerHTML = ''
       delete (window as any).INJECTED_PROJECT_CONFIG
     }
-  }, [visible, currentProject?.projectId, currentProject?.apiSettings])
+  }, [visible, currentProject?.projectId])
+
+  /* Saving settings must not rebuild the dashboard. A rebuild left the ceiling
+     cut on and the model disappeared. The open dashboard reads this live. */
+  useEffect(() => {
+    if (!visible || !currentProject) return
+    const injected = (window as any).INJECTED_PROJECT_CONFIG
+    if (!injected) return
+    Object.assign(injected, dashboardProjectInfo(currentProject))
+    const fin = injected.fin
+    const s = currentProject.apiSettings
+    if (fin && s) {
+      fin.baseUrl = s.finBaseUrl || fin.baseUrl
+      fin.project = s.finProjectName || ''
+      fin.interval = s.finInterval || fin.interval
+      fin.directMode = s.finDirectMode || false
+      if (s.finLivePoints) fin.livePoints = s.finLivePoints
+      if (s.finEndpoints) fin.endpoints = s.finEndpoints
+    }
+    try { (window as any).EKO_HEAT?.relink?.() } catch { /* the next data tick rebuilds the zones */ }
+    try { (window as any).EKO?.set?.({}) } catch { /* the dashboard redraws on its next refresh */ }
+    const prev = savedSettings.current
+    const next = currentProject.apiSettings
+    savedSettings.current = next
+    const page = (window as any).EKO?.state?.pageId
+    /* Save Settings while Overview is open must not keep the heatmap camera. */
+    if (prev !== undefined && prev !== next && page && page !== 'heatmap') {
+      try { (window as any).EKO?.releaseHeatView?.() } catch { /* the home camera is applied on the next open */ }
+    }
+  }, [visible, currentProject, currentProject?.apiSettings])
 
   if (!visible) return null
 
