@@ -250,14 +250,16 @@ export interface FinSeverityBands {
 
 /**
  * How this project's heatmap is drawn. Absent fields keep the Marsa behaviour:
- * top view, ground floor, architecture faded, colour filling the whole room height.
+ * top view, ground floor, nothing faded, colour filling the whole room height.
  */
 export interface HeatmapSetup {
   /** top looks straight down. inside looks in from a high corner, under the ceiling. */
   camera?: 'top' | 'inside'
+  /** The top-view camera the user saved. Absent uses the automatic top look. */
+  view?: ProjectCamera
   /** A storey id from the model, or ALL. Absent isolates Ground floor. */
   floor?: string
-  /** File names to fade while the heatmap is open. Absent fades the architecture discipline. An empty list fades nothing. */
+  /** File names to fade while the heatmap is open. Absent, or an empty list, fades nothing. */
   fadeModels?: string[]
   /** How solid a faded model stays, from 0.15 to 0.8. Absent is 0.35. */
   fadeAmount?: number

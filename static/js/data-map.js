@@ -2232,10 +2232,13 @@
     zones.forEach(function (z) {
       (z.bimIds || []).forEach(function (id) { if (id) usedGuid[id] = true; });
     });
+    /* A linked room is drawn only when its heatmap name is a sensor (IS-01, IAQ-02).
+       The other rooms stay in Equipment & Spaces and are not zones. */
     linkedSpaces.forEach(function (l) {
       if (!l || !l.guid || usedGuid[l.guid]) return;
-      usedGuid[l.guid] = true;
       var key = sensorKey(l.name);
+      if (!key) return;
+      usedGuid[l.guid] = true;
       var kind = key.indexOf('IAQ') === 0 ? 'iaq' : 'is';
       zones.push({
         nameEn: l.name, nameAr: l.name, floor: '', kind: kind,

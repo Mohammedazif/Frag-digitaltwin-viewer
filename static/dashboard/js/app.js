@@ -35,9 +35,12 @@
     var h = window.INJECTED_PROJECT_CONFIG && window.INJECTED_PROJECT_CONFIG.heatmap;
     h = h && typeof h === 'object' ? h : {};
     var floor = h.floor || 'Ground floor';
+    var view = h.view && h.view.position && h.view.target
+      && h.view.position.length === 3 && h.view.target.length === 3 ? h.view : null;
     return {
       camera: h.camera === 'inside' ? 'inside' : 'top',
       floor: floor,
+      view: view,
       /* A named storey is that floor only. Ground floor and All floors keep the Marsa filter. */
       alone: !!(h.floor && h.floor !== 'ALL')
     };
@@ -55,9 +58,13 @@
     if (app.engine && app.engine.isolateLayer) app.engine.isolateLayer(layers, true);
     if (app.engine && app.engine.fadeArch) app.engine.fadeArch(true);
     if (forceLook) {
-      window.dispatchEvent(new CustomEvent('eko-look-face', {
-        detail: { face: s.camera === 'inside' ? 'Inside' : 'Top', closer: true, spaceIds: heatSpaceIds(app) }
-      }));
+      if (s.camera !== 'inside' && s.view) {
+        window.dispatchEvent(new CustomEvent('eko-heat-camera', { detail: s.view }));
+      } else {
+        window.dispatchEvent(new CustomEvent('eko-look-face', {
+          detail: { face: s.camera === 'inside' ? 'Inside' : 'Top', closer: true, spaceIds: heatSpaceIds(app) }
+        }));
+      }
     }
   }
   function heatSpaceIds(app) {

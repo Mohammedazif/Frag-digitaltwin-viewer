@@ -10,7 +10,6 @@ import type { AssetLink } from '@/types'
 import { resetCameraToHome } from '@/lib/cameraUtils'
 import { frameSphereInView } from '@/lib/viewFraming'
 import { createMiniMap } from '@/lib/miniMap'
-import { disciplineOf } from '@/lib/modelDiscipline'
 import {
   classifyLoaded, classifyModel, describeModels, describeUnclassified, hasContentProfile, isProjectSwitch, layerIds, layerVisibility,
   onContentProfiles, pruneContentProfiles, setContentProfile, type ContentProfile,
@@ -359,6 +358,7 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       ghost.group.traverse((o: any) => o.geometry?.dispose())
       ghost = null
     }
+    let heatMoving = false
     const drawGhost = () => {
       labels.setVisible(!!(ghost && ghost.group.visible && active && labelsOn()))
       const hasHeat = heatRoots.size > 0 || alarmGlow.size > 0
@@ -407,7 +407,10 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       const heatDrawn = heatGroups.some(g => g.visible)
       const ghostDrawn = seeThrough.some(g => g.visible)
       try {
-        if (heatDrawn && heatInsideWalls) {
+        if (heatDrawn && (heatInsideWalls || heatMoving)) {
+          /* While the camera is moving, draw the colour on its own. Rebuilding
+             the building's depth on every pan and zoom is a second full render. */
+          if (!heatInsideWalls) renderer.clearDepth()
           renderer.render(overlay, camera)
         } else if (heatDrawn && engine.world?.scene?.three) {
           const scene = engine.world.scene.three
@@ -464,7 +467,6 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       }
     }
     const syncGhost = () => {
-      if (archFadeOn) fadeArch(true)
       if (ghost) {
         ghost.group.matrix.copy(ghost.model.object.matrixWorld)
         ghost.group.matrixWorldNeedsUpdate = true
@@ -1342,20 +1344,15 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       try { (window as { EKO?: { set?: (patch: object) => void } }).EKO?.set?.({}) } catch { /* the dashboard redraws on its next refresh */ }
     })
 
-    /* While the heatmap is up, the chosen models stay present but light,
-       so the room colour reads through them. Glass that is already fainter
-       is left as it is. A project that lists no files fades the architecture. */
+    /* While the heatmap is up, only the models the project ticked stay light.
+       Nothing fades until a file is named. Glass that is already fainter is left as it is. */
     const heatFadeOf = () => {
       const heat = useProjectStore.getState().currentProject?.apiSettings?.heatmap
-      const named = Array.isArray(heat?.fadeModels)
+      const names = Array.isArray(heat?.fadeModels) ? heat.fadeModels : []
       const amount = typeof heat?.fadeAmount === 'number' ? Math.min(0.8, Math.max(0.15, heat.fadeAmount)) : 0.35
-      return { named, names: heat?.fadeModels ?? [], amount }
+      return { names, amount }
     }
-    const modelFades = (fileName: string) => {
-      const fade = heatFadeOf()
-      if (fade.named) return fade.names.includes(fileName)
-      return disciplineOf(fileName) === 'arch'
-    }
+    const modelFades = (fileName: string) => heatFadeOf().names.includes(fileName)
     let archFadeOn = false
     const modelObject = (rec: { modelId: string; type?: string }) => {
       const fragList = engine.fragments?.models?.list
@@ -1548,6 +1545,18 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       listMapped: () => links().list.map(m => ({ id: m.equip, bimId: m.guid })),
       spaceLinks: () => indexSpaceLinks(useProjectStore.getState().currentProject?.assetLinks),
       listLevels: () => levels.map(l => ({ id: l.id, name: l.name })),
+      captureCamera: () => {
+        const cam = engine.world?.camera?.controls as { getPosition?: (out: THREE.Vector3) => void; getTarget?: (out: THREE.Vector3) => void } | undefined
+        if (!cam?.getPosition || !cam?.getTarget) return null
+        const position = new THREE.Vector3()
+        const target = new THREE.Vector3()
+        cam.getPosition(position)
+        cam.getTarget(target)
+        return {
+          position: [position.x, position.y, position.z] as [number, number, number],
+          target: [target.x, target.y, target.z] as [number, number, number],
+        }
+      },
       isolateLevel,
       listLayers: () => layerIds(useModelStore.getState().models).map(id => ({ id, name: id })),
       isolateLayer,
@@ -1610,8 +1619,29 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       const V = (window as any).EKO_V
       if (eko && typeof V?.position === 'function') V.position(eko)
     }
-    const controls = engine.world?.camera?.controls
+    const controls = engine.world?.camera?.controls as {
+      addEventListener: Function
+      removeEventListener: Function
+      setLookAt?: Function
+      updateCameraUp?: Function
+    } | undefined
+    const onHeatMove = () => { heatMoving = true }
+    const onHeatRest = () => { heatMoving = false }
+    const onHeatCamera = (e: Event) => {
+      const view = (e as CustomEvent).detail as { position?: number[]; target?: number[] } | undefined
+      const camCtl = engine.world?.camera?.controls as { setLookAt?: Function; updateCameraUp?: Function } | undefined
+      const pos = view?.position
+      const tgt = view?.target
+      if (!camCtl?.setLookAt || !pos || !tgt || pos.length !== 3 || tgt.length !== 3) return
+      const cam = engine.world?.camera?.three as THREE.PerspectiveCamera | undefined
+      cam?.up.set(0, 1, 0)
+      camCtl.updateCameraUp?.()
+      camCtl.setLookAt(pos[0], pos[1], pos[2], tgt[0], tgt[1], tgt[2], true)
+    }
     controls?.addEventListener('update', onCameraUpdate)
+    controls?.addEventListener('controlstart', onHeatMove)
+    controls?.addEventListener('rest', onHeatRest)
+    window.addEventListener('eko-heat-camera', onHeatCamera)
     engine.world?.renderer?.onBeforeUpdate?.add(syncGhost)
     engine.world?.renderer?.onAfterUpdate?.add(afterFrame)
 
@@ -1664,6 +1694,9 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
         }
       } catch { /* viewer keeps its canvas */ }
       controls?.removeEventListener('update', onCameraUpdate)
+      controls?.removeEventListener('controlstart', onHeatMove)
+      controls?.removeEventListener('rest', onHeatRest)
+      window.removeEventListener('eko-heat-camera', onHeatCamera)
       engine.world?.renderer?.onBeforeUpdate?.remove(syncGhost)
       engine.world?.renderer?.onAfterUpdate?.remove(afterFrame)
       miniMap.dispose()

@@ -60,9 +60,9 @@ function HeatmapPane({
     <div className="ds-pane">
       <h3 className="ds-section-title">Heatmap</h3>
       <p className="ds-hint">
-        A room takes a sensor when its heatmap name matches the equipment, such as IS-01 or IAQ-02.
-        IS reads zone temperature and humidity. IAQ reads CO2. Any other name is its own zone and stays uncoloured until a reading exists.
-        Save, then open the heatmap. Leave this as it is and the project keeps the top view of the ground floor, with the architecture faded.
+        A room is drawn only when its heatmap name is a sensor, such as IS-01 or IAQ-02.
+        IS reads zone temperature and humidity. IAQ reads CO2. Other rooms stay in Equipment & Spaces and are not added to the heatmap.
+        Save, then open the heatmap. Leave this as it is and the project keeps the top view of the ground floor, with the models as they are.
       </p>
 
       <h3 className="ds-section-title" style={{ marginTop: 24 }}>View</h3>
@@ -70,6 +70,21 @@ function HeatmapPane({
         <button type="button" className={`ds-toggle-btn ${current.camera !== 'inside' ? 'active' : ''}`} onClick={() => patch({ camera: 'top' })}>Top view</button>
         <button type="button" className={`ds-toggle-btn ${current.camera === 'inside' ? 'active' : ''}`} onClick={() => patch({ camera: 'inside', insideWalls: true })}>Inside the floor</button>
       </div>
+      <div className="al-filters" style={{ marginBottom: 8 }}>
+        <button type="button" className="ds-btn ds-btn-secondary al-small" onClick={() => {
+          const shot = (window as { EKO_HOST_ENGINE?: { captureCamera?: () => { position: [number, number, number]; target: [number, number, number] } | null } }).EKO_HOST_ENGINE?.captureCamera?.()
+          if (!shot) return
+          patch({ camera: 'top', view: shot })
+        }}>Save this top view</button>
+        {current.view && (
+          <button type="button" className="ds-btn ds-btn-secondary al-small" onClick={() => {
+            const next = { ...current }
+            delete next.view
+            onChange(next)
+          }}>Use the automatic top view</button>
+        )}
+      </div>
+      <p className="ds-hint">Point the model, then save this top view. The heatmap opens there. Save Settings keeps it. Inside the floor still uses its own look.</p>
       <p className="ds-hint">Inside the floor looks in from a high corner. The ceiling of that storey is cut away, so the colour sits between the walls. Top view does the same while the box below is ticked.</p>
       <label style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0 16px', fontSize: 13 }}>
         <input
@@ -97,19 +112,19 @@ function HeatmapPane({
       {!floors.length && <p className="ds-hint">Open the model to list its storeys here. Ground floor and All floors can be saved before that.</p>}
 
       <h3 className="ds-section-title" style={{ marginTop: 8 }}>Fade</h3>
-      <p className="ds-hint">Ticked models stay on screen but light, so the room colour reads through them. With none ticked, the architecture fades.</p>
+      <p className="ds-hint">Nothing fades until you tick a model. A ticked model stays on screen but light, so the room colour reads through it.</p>
       {models.length ? models.map(name => (
         <label key={name} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6, fontSize: 13 }}>
           <input type="checkbox" checked={namedFade && faded.has(name)} onChange={() => toggleModel(name)} />
           {name.split(/[/\\]/).pop()}
         </label>
       )) : <p className="ds-hint">No model is loaded.</p>}
-      {namedFade && (
+      {faded.size > 0 && (
         <button type="button" className="ds-btn ds-btn-secondary al-small" onClick={() => {
           const next = { ...current }
           delete next.fadeModels
           onChange(next)
-        }}>Fade architecture only</button>
+        }}>Don't fade any model</button>
       )}
       <label style={{ display: 'block', marginTop: 12, fontSize: 13 }}>
         Stays {Math.round((current.fadeAmount ?? 0.35) * 100)}% solid
