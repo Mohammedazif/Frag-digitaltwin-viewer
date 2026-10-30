@@ -190,9 +190,15 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
 
     /* Which saved rooms the model files on this storey. One storey, not every room. */
     const guidFloor = new Map<string, string>()
+    const floorRooms = new Map<string, Set<string>>()
     const guidsForFloor = async (levelId: string, wanted: Set<string>) => {
       const out = new Set<string>()
       if (!levelId || levelId === 'ALL' || !wanted.size || !engine?.fragments?.models?.list) return out
+      const cached = floorRooms.get(levelId)
+      if (cached) {
+        for (const g of cached) if (wanted.has(g)) out.add(g)
+        return out
+      }
       const models = [...engine.fragments.models.list.values()]
       models.sort((a, b) => {
         const rec = (m: any) => useModelStore.getState().models.find(r => r.modelId === m.modelId)
@@ -214,7 +220,10 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
           out.add(g)
           guidFloor.set(g, levelId)
         })
-        if (out.size) break
+        if (out.size) {
+          floorRooms.set(levelId, new Set(out))
+          break
+        }
       }
       return out
     }
@@ -1064,10 +1073,7 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
         repositionMarkers()
         /* The floor hide lands after the colour pass has started. Paint again
            for the storey that is actually open. */
-        if (spaceHeatActive && heatReq) {
-          heatSig = ''
-          void applySpaceHeat(heatReq.zones, heatReq.mode)
-        }
+        if (spaceHeatActive && heatReq) void applySpaceHeat(heatReq.zones, heatReq.mode)
       }
     }
 
@@ -1194,15 +1200,36 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       heatGeoms.set(bimId, geoms)
       return geoms
     }
+    const heatFloorSheets = new Map<string, { meshes: THREE.Mesh[]; guids: Set<string>; done: boolean }>()
     const dropHeatSheets = () => {
-      heatSheets.forEach(mesh => {
-        mesh.removeFromParent()
-        mesh.geometry.dispose()
-        const mat = mesh.material as THREE.Material
-        unwatchClipping(mat)
-        mat.dispose()
-      })
+      for (const rec of heatFloorSheets.values()) {
+        for (const mesh of rec.meshes) {
+          mesh.removeFromParent()
+          mesh.geometry.dispose()
+          const mat = mesh.material as THREE.Material
+          unwatchClipping(mat)
+          mat.dispose()
+        }
+      }
+      heatFloorSheets.clear()
       heatSheets = []
+    }
+    /* Picked floor first, then the floors under it. Isolate floor is that floor only. */
+    const floorsInView = (levelId: string, alone: boolean) => {
+      const floors = [...floorCatalog.values()]
+      if (!levelId || levelId === 'ALL') return floors.sort((a, b) => b.rank - a.rank).map(f => f.id)
+      const picked = floorCatalog.get(levelId)
+      if (!picked) return [levelId]
+      return floors
+        .filter(f => alone ? f.rank === picked.rank : f.rank <= picked.rank)
+        .sort((a, b) => (a.id === picked.id ? -1 : b.id === picked.id ? 1 : b.rank - a.rank))
+        .map(f => f.id)
+    }
+    const showHeatFloors = (ids: Set<string>) => {
+      for (const [floor, rec] of heatFloorSheets) {
+        const on = ids.has(floor)
+        for (const mesh of rec.meshes) mesh.visible = on
+      }
     }
     const clearSpaceHeat = async () => {
       heatSeq++
@@ -1211,8 +1238,8 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       heatInsideWalls = false
       syncHeatClip()
       applySpacesGate()
-      heatSig = ''
-      dropHeatSheets()
+      showHeatFloors(new Set())
+      heatRoots.forEach(root => { root.visible = false })
       heatByBim.forEach(rec => {
         unwatchClipping(rec.mat)
         rec.mat.dispose()
@@ -1222,11 +1249,6 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
         } catch { /* */ }
       })
       heatByBim.clear()
-      heatRoots.forEach(root => {
-        root.removeFromParent()
-        root.clear()
-      })
-      heatRoots.clear()
     }
     /* Split long edges so a room face can change colour across itself, not
        only at its corners. */
@@ -1364,7 +1386,6 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       heatInsideWalls = inside
       const md = mode === 'comfort' || mode === 'hum' ? mode : 'temp'
       const levelId = ((window as any).EKO?.state?.dock?.level as string) || 'ALL'
-      const span = levelId !== 'ALL' ? spanOf(levelId) : null
       const idsOf = (z: { bimId?: string; bimIds?: string[] }) =>
         (z.bimIds && z.bimIds.length ? z.bimIds : (z.bimId ? [z.bimId] : [])).filter(id => isGuid(id))
       const jobs: { bimId: string; t: number }[] = []
@@ -1374,122 +1395,109 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
         if (t == null) continue
         for (const bimId of idsOf(z)) jobs.push({ bimId, t })
       }
-      const sig = (inside ? 'in|' : 'out|') + levelId + '|' + (span ? `${round1(span.yLo)}:${round1(span.yHi)}` : '-') + '|' + md + '|' + jobs.map(j => `${j.bimId}:${round1(j.t)}`).join(';')
-      if (sig === heatSig) return
+      const valueSig = (inside ? 'in|' : 'out|') + md + '|' + jobs.map(j => `${j.bimId}:${round1(j.t)}`).join(';')
+      if (valueSig !== heatSig) {
+        dropHeatSheets()
+        heatSig = valueSig
+      }
       const seq = ++heatSeq
-      heatSig = sig
-      dropHeatSheets()
-      type Found = { entry: Located; t: number; bimId: string }
       const wanted = new Set(jobs.map(job => job.bimId))
-      const oneFloor = levelId !== 'ALL'
-      const onThisFloor = oneFloor ? await guidsForFloor(levelId, wanted) : wanted
-      if (seq !== heatSeq) return
-      /* All floors reads every saved room. A named floor reads only that storey. */
-      const first = oneFloor ? [...onThisFloor] : [...wanted]
-      await locateMany(first)
-      if (seq !== heatSeq) return
-      const found: Found[] = []
-      for (const job of jobs) {
-        if (levelId !== 'ALL' && onThisFloor.size && !onThisFloor.has(job.bimId) && guidFloor.get(job.bimId) !== levelId) continue
-        const entry = located.get(job.bimId) ?? null
-        if (!entry?.localBox || entry.localBox.isEmpty()) continue
-        found.push({ entry, t: job.t, bimId: job.bimId })
+      const alone = !!(window as any).EKO?.state?.dock?.floorAlone
+      if (levelId && levelId !== 'ALL') await guidsForFloor(levelId, wanted)
+      else {
+        for (const model of engine.fragments?.models?.list?.values() ?? []) await readStoreys(model)
       }
       if (seq !== heatSeq) return
-      const onOpen = (entry: Located) => {
-        if (levelId === 'ALL') return true
-        /* The floor filter hides the space meshes. Colour uses the room's height
-           instead, so a hidden space on this storey still paints. */
-        if (span) {
-          entry.model.object.updateMatrixWorld(true)
-          const y = entry.localBox.getCenter(new THREE.Vector3()).applyMatrix4(entry.model.object.matrixWorld).y
-          return y >= span.yLo - 1.5 && y <= span.yHi + 1.5
-        }
-        const hidden = levelHidden.get(entry.model)
-        if (hidden) return !hidden.has(entry.localId)
-        return true
+      const order = floorsInView(levelId, alone)
+      const show = new Set(order)
+      showHeatFloors(show)
+      const missing = order.filter(id => !heatFloorSheets.get(id)?.done)
+      const wake = engine.world?.renderer as { needsUpdate?: boolean } | undefined
+      if (!missing.length) {
+        syncGhost()
+        if (wake) wake.needsUpdate = true
+        return
       }
-      const openFound = found.filter(item => onOpen(item.entry))
-      /* A real floor test that matches nothing stays empty. Painting every
-         storey would put the ceiling cut on the wrong floor and hide the model. */
-      const tested = levelId !== 'ALL' && (!!span || found.some(item => levelHidden.has(item.entry.model)))
-      const use = tested ? openFound : found
-      /* One linked space is often the whole floor. Its box is not a room.
-         Drop a footprint much larger than the typical room on this pass. */
-      const footprint = (entry: Located) => {
-        const s = entry.localBox.getSize(new THREE.Vector3())
-        return Math.abs(s.x * s.z)
-      }
-      const areas = use.map(item => footprint(item.entry))
-      const finite = areas.filter(a => a > 1).sort((a, b) => a - b)
-      const typical = finite.length ? finite[Math.floor(finite.length / 2)] : 0
-      const roomsOnly = typical > 0 ? use.filter((_, i) => areas[i] <= typical * 16) : use
-      const paint = roomsOnly.length ? roomsOnly : use
-      type Room = { model: any; geoms: THREE.BufferGeometry[]; x: number; y: number; z: number; hx: number; hy: number; hz: number; t: number }
-      /* The saved list is names and ids. The colour uses each room's bounds,
-         which were just read in one pass. It does not pull every room mesh. */
-      const rooms: Room[] = []
-      for (const item of paint) {
-        const c = item.entry.localBox.getCenter(new THREE.Vector3())
-        const size = item.entry.localBox.getSize(new THREE.Vector3())
-        rooms.push({
-          model: item.entry.model,
-          geoms: [plateFrom(item.entry.localBox)],
-          x: c.x, y: c.y, z: c.z,
-          hx: size.x / 2, hy: size.y / 2, hz: size.z / 2,
-          t: item.t,
-        })
-      }
-      if (seq !== heatSeq) return
       const stops = HEAT_STOPS[md] || HEAT_STOPS.temp
       const low = new THREE.Color(stops[0])
       const high = new THREE.Color(stops[1])
-      const byModel = new Map<any, Room[]>()
-      for (const room of rooms) {
-        const list = byModel.get(room.model) || []
-        list.push(room)
-        byModel.set(room.model, list)
-      }
-      const wake = engine.world?.renderer as { needsUpdate?: boolean } | undefined
       const nextFrame = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
-      for (const [model, samples] of byModel) {
-        /* Same blend Marsa uses. With hundreds of rooms, blend from one point
-           per temperature so the colour still grades and the page does not lock. */
-        const field = new Map<string, { x: number; z: number; n: number; t: number }>()
-        for (const room of samples) {
-          const key = room.t.toFixed(3)
-          const g = field.get(key) ?? { x: 0, z: 0, n: 0, t: room.t }
-          g.x += room.x
-          g.z += room.z
-          g.n++
-          field.set(key, g)
+      for (const floorId of missing) {
+        if (seq !== heatSeq) return
+        let kept = heatFloorSheets.get(floorId)
+        if (!kept) {
+          kept = { meshes: [], guids: new Set(), done: false }
+          heatFloorSheets.set(floorId, kept)
         }
-        const graded = samples.length > 24
-          ? [...field.values()].map(g => ({ x: g.x / g.n, z: g.z / g.n, t: g.t }))
-          : samples
-        let near = 0, nearN = 0
-        for (let i = 0; i < graded.length; i++) {
-          let best = Infinity
-          for (let j = 0; j < graded.length; j++) {
-            if (i === j) continue
-            best = Math.min(best, Math.hypot(graded[i].x - graded[j].x, graded[i].z - graded[j].z))
+        const guids = await guidsForFloor(floorId, wanted)
+        if (seq !== heatSeq) return
+        await locateMany([...guids])
+        if (seq !== heatSeq) return
+        type Room = { model: any; geoms: THREE.BufferGeometry[]; x: number; y: number; z: number; hx: number; hy: number; hz: number; t: number; guid: string; area: number }
+        const rooms: Room[] = []
+        for (const job of jobs) {
+          if (!guids.has(job.bimId) || kept.guids.has(job.bimId)) continue
+          const entry = located.get(job.bimId)
+          if (!entry?.localBox || entry.localBox.isEmpty()) continue
+          const size = entry.localBox.getSize(new THREE.Vector3())
+          const c = entry.localBox.getCenter(new THREE.Vector3())
+          rooms.push({
+            model: entry.model, geoms: [plateFrom(entry.localBox)],
+            x: c.x, y: c.y, z: c.z, hx: size.x / 2, hy: size.y / 2, hz: size.z / 2,
+            t: job.t, guid: job.bimId, area: Math.abs(size.x * size.z),
+          })
+        }
+        const areas = rooms.map(r => r.area).filter(a => a > 1).sort((a, b) => a - b)
+        const typical = areas.length ? areas[Math.floor(areas.length / 2)] : 0
+        const paint = typical > 0 ? rooms.filter(r => r.area <= typical * 16) : rooms
+        const byModel = new Map<any, Room[]>()
+        for (const room of paint) {
+          const list = byModel.get(room.model) || []
+          list.push(room)
+          byModel.set(room.model, list)
+        }
+        for (const [model, samples] of byModel) {
+          const field = new Map<string, { x: number; z: number; n: number; t: number }>()
+          for (const room of samples) {
+            const key = room.t.toFixed(3)
+            const g = field.get(key) ?? { x: 0, z: 0, n: 0, t: room.t }
+            g.x += room.x
+            g.z += room.z
+            g.n++
+            field.set(key, g)
           }
-          if (isFinite(best) && best > 0) { near += best; nearN++ }
-        }
-        const sigma = Math.max(nearN ? (near / nearN) * 0.85 : 1, 0.5)
-        const root = heatRootOf(model)
-        for (const room of samples) {
-          if (seq !== heatSeq) return
-          for (const geom of room.geoms) {
-            const mesh = paintRoomPlate(geom, room, graded, sigma, low, high, inside)
-            root.add(mesh)
-            heatSheets.push(mesh)
+          const graded = samples.length > 24
+            ? [...field.values()].map(g => ({ x: g.x / g.n, z: g.z / g.n, t: g.t }))
+            : samples
+          let near = 0, nearN = 0
+          for (let i = 0; i < graded.length; i++) {
+            let best = Infinity
+            for (let j = 0; j < graded.length; j++) {
+              if (i === j) continue
+              best = Math.min(best, Math.hypot(graded[i].x - graded[j].x, graded[i].z - graded[j].z))
+            }
+            if (isFinite(best) && best > 0) { near += best; nearN++ }
           }
-          syncGhost()
-          if (wake) wake.needsUpdate = true
-          await nextFrame()
+          const sigma = Math.max(nearN ? (near / nearN) * 0.85 : 1, 0.5)
+          const root = heatRootOf(model)
+          for (const room of samples) {
+            if (seq !== heatSeq) return
+            for (const geom of room.geoms) {
+              const mesh = paintRoomPlate(geom, room, graded, sigma, low, high, inside)
+              mesh.visible = true
+              root.add(mesh)
+              heatSheets.push(mesh)
+              kept.meshes.push(mesh)
+            }
+            kept.guids.add(room.guid)
+            syncGhost()
+            if (wake) wake.needsUpdate = true
+            await nextFrame()
+          }
         }
+        if (seq === heatSeq) kept.done = true
       }
+      return
     }
 
     // Same rule as isAlarmed
@@ -1913,7 +1921,6 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
         void isolateLevel(wait.id, true)
       }
       if (justLoaded && heatReq && (window as any).EKO?.state?.pageId === 'heatmap') {
-        heatSig = ''
         void applySpaceHeat(heatReq.zones, heatReq.mode)
       }
     }, 3000)
