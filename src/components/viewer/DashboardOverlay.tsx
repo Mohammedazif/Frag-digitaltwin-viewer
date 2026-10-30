@@ -407,7 +407,9 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       const heatDrawn = heatGroups.some(g => g.visible)
       const ghostDrawn = seeThrough.some(g => g.visible)
       try {
-        if (heatDrawn && engine.world?.scene?.three) {
+        if (heatDrawn && heatInsideWalls) {
+          renderer.render(overlay, camera)
+        } else if (heatDrawn && engine.world?.scene?.three) {
           const scene = engine.world.scene.three
           const hidden: THREE.Object3D[] = []
           const prevOverride = scene.overrideMaterial
@@ -474,6 +476,7 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
         root.matrixWorldNeedsUpdate = true
         root.visible = model.object.visible !== false
       })
+      syncHeatClip()
       // The selected equipment already has its own highlight
       alarmGlow.forEach((rec, bimId) => {
         rec.group.matrix.copy(rec.model.object.matrixWorld)
@@ -968,6 +971,44 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
     const heatByBim = new Map<string, { mat: THREE.MeshBasicMaterial; model: any; localId: number }>()
     let heatSheets: THREE.Mesh[] = []
     let heatSig = ''
+    /* Colour sits in the room and is tested against the building, so a ceiling does not hide it from an angled view. */
+    let heatInsideWalls = false
+    const heatInsideOf = () => {
+      const heat = useProjectStore.getState().currentProject?.apiSettings?.heatmap
+      return !!(heat && (heat.insideWalls || heat.camera === 'inside'))
+    }
+    /* One horizontal cut, just above the colour, so the ceiling of the open floor
+       is out of the way and the walls still frame the rooms. Absent on Marsa. */
+    const heatClip = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+    const heatClipTop = new THREE.Vector3()
+    const syncHeatClip = () => {
+      const renderer = engine.world?.renderer?.three as THREE.WebGLRenderer | undefined
+      if (!renderer) return
+      const planes = renderer.clippingPlanes
+      const drop = () => {
+        const at = planes.indexOf(heatClip)
+        if (at >= 0) planes.splice(at, 1)
+      }
+      if (!heatInsideWalls || !heatSheets.length) { drop(); return }
+      const tops: number[] = []
+      heatRoots.forEach(root => {
+        root.updateWorldMatrix(true, true)
+        for (const mesh of heatSheets) {
+          if (mesh.parent !== root) continue
+          const box = mesh.geometry.boundingBox
+          if (!box) continue
+          heatClipTop.set(0, box.max.y, 0).applyMatrix4(mesh.matrixWorld)
+          tops.push(heatClipTop.y)
+        }
+      })
+      if (!tops.length) { drop(); return }
+      tops.sort((a, b) => a - b)
+      const hi = tops[tops.length - 1]
+      const band = tops.filter(y => y >= hi - 2.5)
+      const open = band.length ? band[0] : hi
+      heatClip.set(new THREE.Vector3(0, 1, 0), -(open + 0.08))
+      if (planes.indexOf(heatClip) < 0) planes.push(heatClip)
+    }
     /* Two colours per category so the low end and the high end stay distinct.
        The same pairs are in analytics.js heatStops. */
     const HEAT_STOPS: Record<string, [number, number]> = {
@@ -1030,6 +1071,8 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
     }
     const clearSpaceHeat = async () => {
       spaceHeatActive = false
+      heatInsideWalls = false
+      syncHeatClip()
       applySpacesGate()
       heatSig = ''
       dropHeatSheets()
@@ -1127,18 +1170,22 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
     }
     const paintRoomPlate = (
       geom: THREE.BufferGeometry,
-      own: { x: number; y: number; z: number; t: number; hx: number; hz: number },
+      own: { x: number; y: number; z: number; t: number; hx: number; hy: number; hz: number },
       samples: { x: number; z: number; t: number }[],
       sigma: number,
       low: THREE.Color,
       high: THREE.Color,
+      inset: boolean,
     ) => {
       const g = subdivideHeat(geom, Math.max(sigma * 0.45, 0.4))
       const pos = g.getAttribute('position') as THREE.BufferAttribute
       const sx = own.hx > 0.08 ? Math.max((own.hx - 0.05) / own.hx, 0.85) : 1
       const sz = own.hz > 0.08 ? Math.max((own.hz - 0.05) / own.hz, 0.85) : 1
+      const sy = inset && own.hy > 0.05 ? Math.max(1 - Math.min(0.45, own.hy * 0.45) / own.hy, 0.55) : 1
+      const drop = inset ? (1 - sy) * own.hy * 0.85 : 0
       for (let i = 0; i < pos.count; i++) {
         pos.setX(i, own.x + (pos.getX(i) - own.x) * sx)
+        pos.setY(i, own.y + (pos.getY(i) - own.y) * sy - drop)
         pos.setZ(i, own.z + (pos.getZ(i) - own.z) * sz)
       }
       pos.needsUpdate = true
@@ -1163,6 +1210,7 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
         colors[o + 3] = 0.55
       }
       g.setAttribute('color', new THREE.BufferAttribute(colors, 4))
+      g.computeBoundingBox()
       g.computeBoundingSphere()
       const mesh = new THREE.Mesh(g, heatPlateMat())
       mesh.frustumCulled = false
@@ -1172,14 +1220,17 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
     const applySpaceHeat = async (zones: { bimId?: string; bimIds?: string[]; tempC?: number | null; rh?: number | null; co2?: number | null }[], mode?: string) => {
       spaceHeatActive = true
       applySpacesGate()
+      const inside = heatInsideOf()
+      heatInsideWalls = inside
+      syncHeatClip()
       const md = mode === 'comfort' || mode === 'hum' ? mode : 'temp'
       const idsOf = (z: { bimId?: string; bimIds?: string[] }) =>
         (z.bimIds && z.bimIds.length ? z.bimIds : (z.bimId ? [z.bimId] : [])).filter(id => isGuid(id))
-      const sig = md + '|' + (zones || []).map(z => `${idsOf(z).join(',')}:${round1(z.tempC)}:${round1(z.rh)}:${round1(z.co2)}`).join(';')
+      const sig = (inside ? 'in|' : 'out|') + md + '|' + (zones || []).map(z => `${idsOf(z).join(',')}:${round1(z.tempC)}:${round1(z.rh)}:${round1(z.co2)}`).join(';')
       if (sig === heatSig) return
       heatSig = sig
       dropHeatSheets()
-      type Room = { model: any; geoms: THREE.BufferGeometry[]; x: number; y: number; z: number; hx: number; hz: number; t: number }
+      type Room = { model: any; geoms: THREE.BufferGeometry[]; x: number; y: number; z: number; hx: number; hy: number; hz: number; t: number }
       const rooms: Room[] = []
       for (const z of zones || []) {
         const raw = md === 'comfort' ? z.co2 : md === 'hum' ? z.rh : z.tempC
@@ -1192,7 +1243,7 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
           if (!geoms.length) continue
           const c = entry.localBox.getCenter(new THREE.Vector3())
           const size = entry.localBox.getSize(new THREE.Vector3())
-          rooms.push({ model: entry.model, geoms, x: c.x, y: c.y, z: c.z, hx: size.x / 2, hz: size.z / 2, t })
+          rooms.push({ model: entry.model, geoms, x: c.x, y: c.y, z: c.z, hx: size.x / 2, hy: size.y / 2, hz: size.z / 2, t })
         }
       }
       const stops = HEAT_STOPS[md] || HEAT_STOPS.temp
@@ -1218,7 +1269,7 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
         const root = heatRootOf(model)
         for (const room of samples) {
           for (const geom of room.geoms) {
-            const mesh = paintRoomPlate(geom, room, samples, sigma, low, high)
+            const mesh = paintRoomPlate(geom, room, samples, sigma, low, high, inside)
             root.add(mesh)
             heatSheets.push(mesh)
           }
@@ -1291,10 +1342,20 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       try { (window as { EKO?: { set?: (patch: object) => void } }).EKO?.set?.({}) } catch { /* the dashboard redraws on its next refresh */ }
     })
 
-    /* While the heatmap is up, the architecture model stays present but light,
-       so the room colour reads through the walls. Glass that is already fainter
-       is left as it is. Other disciplines stay solid. */
-    const ARCH_FADE = 0.35
+    /* While the heatmap is up, the chosen models stay present but light,
+       so the room colour reads through them. Glass that is already fainter
+       is left as it is. A project that lists no files fades the architecture. */
+    const heatFadeOf = () => {
+      const heat = useProjectStore.getState().currentProject?.apiSettings?.heatmap
+      const named = Array.isArray(heat?.fadeModels)
+      const amount = typeof heat?.fadeAmount === 'number' ? Math.min(0.8, Math.max(0.15, heat.fadeAmount)) : 0.35
+      return { named, names: heat?.fadeModels ?? [], amount }
+    }
+    const modelFades = (fileName: string) => {
+      const fade = heatFadeOf()
+      if (fade.named) return fade.names.includes(fileName)
+      return disciplineOf(fileName) === 'arch'
+    }
     let archFadeOn = false
     const modelObject = (rec: { modelId: string; type?: string }) => {
       const fragList = engine.fragments?.models?.list
@@ -1311,22 +1372,23 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
     }
     const fadeArch = (on: boolean) => {
       archFadeOn = on
+      const amount = heatFadeOf().amount
       for (const rec of useModelStore.getState().models) {
-        if (disciplineOf(rec.originalFileName || '') !== 'arch') continue
+        const fadeThis = on && modelFades(rec.originalFileName || '')
         const root = modelObject(rec)
         if (!root) continue
         root.traverse((obj: any) => {
           const mats = obj.material ? (Array.isArray(obj.material) ? obj.material : [obj.material]) : []
           for (const mat of mats) {
             if (!mat) continue
-            if (on) {
-              if (mat.userData?.ekoArchFade === ARCH_FADE && mat.opacity === ARCH_FADE && mat.depthWrite === false) continue
-              if (!mat.userData?.ekoArchSaved && mat.transparent && typeof mat.opacity === 'number' && mat.opacity < ARCH_FADE) continue
+            if (fadeThis) {
+              if (mat.userData?.ekoArchFade === amount && mat.opacity === amount && mat.depthWrite === false) continue
+              if (!mat.userData?.ekoArchSaved && mat.transparent && typeof mat.opacity === 'number' && mat.opacity < amount) continue
               if (!mat.userData.ekoArchSaved) {
                 mat.userData.ekoArchSaved = { opacity: mat.opacity, transparent: mat.transparent, depthWrite: mat.depthWrite }
               }
-              mat.userData.ekoArchFade = ARCH_FADE
-              mat.opacity = ARCH_FADE
+              mat.userData.ekoArchFade = amount
+              mat.opacity = amount
               mat.transparent = true
               mat.depthWrite = false
               mat.needsUpdate = true
@@ -1341,7 +1403,7 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
             }
           }
           if (!obj.isMesh) return
-          if (on) {
+          if (fadeThis) {
             if (obj.userData.ekoArchCast == null) obj.userData.ekoArchCast = !!obj.castShadow
             obj.castShadow = false
           } else if (obj.userData.ekoArchCast != null) {

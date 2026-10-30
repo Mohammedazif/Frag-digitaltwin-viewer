@@ -189,6 +189,7 @@ export function dashboardProjectInfo(meta: { projectId: string; name: string; ap
       co2Factor: rateOrNull(s.co2Factor),
       co2FactorName: s.co2FactorName || '',
     },
+    heatmap: s.heatmap && typeof s.heatmap === 'object' ? s.heatmap : null,
   }
 }
 

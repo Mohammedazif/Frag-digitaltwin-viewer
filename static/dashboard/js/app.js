@@ -31,6 +31,35 @@
     return _pluralRules[lang].select(n);
   }
   /* GlobalIds of the heatmap rooms, once live data has filled them. */
+  function heatSetup() {
+    var h = window.INJECTED_PROJECT_CONFIG && window.INJECTED_PROJECT_CONFIG.heatmap;
+    h = h && typeof h === 'object' ? h : {};
+    var floor = h.floor || 'Ground floor';
+    return {
+      camera: h.camera === 'inside' ? 'inside' : 'top',
+      floor: floor,
+      /* A named storey is that floor only. Ground floor and All floors keep the Marsa filter. */
+      alone: !!(h.floor && h.floor !== 'ALL')
+    };
+  }
+  function applyHeatView(app, forceLook) {
+    var s = heatSetup();
+    var layers = ['arch', 'elec', 'int', 'mech'];
+    if (app.state.dock) {
+      app.state.dock.level = s.floor;
+      app.state.dock.floorAlone = s.alone;
+      app.state.dock.layer = layers;
+      app.state.dock.layerContext = true;
+    }
+    if (app.engine && app.engine.isolateLevel) app.engine.isolateLevel(s.floor, true);
+    if (app.engine && app.engine.isolateLayer) app.engine.isolateLayer(layers, true);
+    if (app.engine && app.engine.fadeArch) app.engine.fadeArch(true);
+    if (forceLook) {
+      window.dispatchEvent(new CustomEvent('eko-look-face', {
+        detail: { face: s.camera === 'inside' ? 'Inside' : 'Top', closer: true, spaceIds: heatSpaceIds(app) }
+      }));
+    }
+  }
   function heatSpaceIds(app) {
     const zones = (app.data && app.data.heat && app.data.heat.zones) || [];
     const ids = [];
@@ -216,11 +245,10 @@
                  pageId, module: targetModule, sub: targetSub,
                  mkPop: null, dlg: null, mobMore: false, modelFs: false });
     },
-    /* The model's setup for a page: the heat map isolates the ground floor and looks down; other pages show their layer and go home. */
+    /* The model's setup for a page: the heat map uses this project's floor and camera; other pages show their layer and go home. */
     pageView(pageId, targetModule, targetSub, from, moved){
       const enteringHeat = pageId === 'heatmap' && from !== 'heatmap';
       const leavingHeat = from === 'heatmap' && pageId !== 'heatmap';
-      const HEAT_LAYERS = ['arch','elec','int','mech'];
       /* HVAC & Mechanical share one model. Electrical is the other. Both open in Photoreal. Any other page returns to the style it had. */
       const mep = pageId !== 'heatmap' && targetModule === 'systems' && (targetSub === 'hvac' || targetSub === 'mechanical' || targetSub === 'electrical');
       if (this.state.dock) {
@@ -234,14 +262,9 @@
       }
 
       if (pageId === 'heatmap') {
-        if (this.state.dock) { this.state.dock.level = 'Ground floor'; this.state.dock.floorAlone = false; this.state.dock.layer = HEAT_LAYERS; this.state.dock.layerContext = true; }
-        if (this.engine && this.engine.isolateLevel) this.engine.isolateLevel('Ground floor', true);
-        if (this.engine && this.engine.isolateLayer) this.engine.isolateLayer(HEAT_LAYERS, true);
-        if (this.engine && this.engine.fadeArch) this.engine.fadeArch(true);
-        if (enteringHeat || !this.state._heatViewed) {
-          this.state._heatViewed = true;
-          window.dispatchEvent(new CustomEvent('eko-look-face', { detail: { face: 'Top', closer: true, spaceIds: heatSpaceIds(this) } }));
-        }
+        var look = enteringHeat || !this.state._heatViewed;
+        if (look) this.state._heatViewed = true;
+        applyHeatView(this, look);
       } else if (leavingHeat) {
         if (this.state.dock) { this.state.dock.level = 'ALL'; this.state.dock.floorAlone = false; this.state.dock.layer = 'all'; this.state.dock.layerContext = false; }
         if (this.engine && this.engine.isolateLevel) this.engine.isolateLevel('ALL', true);
@@ -1211,9 +1234,7 @@
         E.state.dock.floorAlone = false;   /* Reset goes back to how the viewer opens: the floor filter is cumulative again */
         E.state.dock.layerContext = E.state.pageId === 'heatmap' || !!mepLayer;   /* the layers Reset restores are views, not picks */
         if(E.state.pageId === 'heatmap'){
-          if(E.engine.isolateLevel) E.engine.isolateLevel('Ground floor', true);
-          if(E.engine.isolateLayer) E.engine.isolateLayer(['arch','elec','int','mech'], true);
-          window.dispatchEvent(new CustomEvent('eko-look-face', { detail: { face: 'Top', closer: true, spaceIds: heatSpaceIds(E) } }));
+          applyHeatView(E, true);
         } else if(E.engine.resetView){
           E.engine.resetView();
           if(E.engine.isolateLevel) E.engine.isolateLevel('ALL');
@@ -1228,7 +1249,7 @@
         const heat = E.state.pageId === 'heatmap';
         E.set(Object.assign({
           dock: heat
-            ? Object.assign({}, E.state.dock, { tool:null, slice:false, bloom:null, style:'default', tone:'blue', minimap:false, level:'Ground floor', floorAlone:false, layer:['arch','elec','int','mech'], layerContext:true })
+            ? Object.assign({}, E.state.dock, { tool:null, slice:false, bloom:null, style:'default', tone:'blue', minimap:false, level: heatSetup().floor, floorAlone: heatSetup().alone, layer:['arch','elec','int','mech'], layerContext:true })
             : { tool:null, slice:false, bloom:null, style: mepLayer ? 'photo' : 'default', tone:'blue', level:'ALL', floorAlone:false, layer: mepLayer || 'all', layerContext: !!mepLayer, alerts:'all', minimap:false },
           histAge:null, measureResult:null
         }, NO_SEL)); return; }

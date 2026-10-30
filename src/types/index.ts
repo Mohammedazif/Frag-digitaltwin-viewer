@@ -248,6 +248,23 @@ export interface FinSeverityBands {
   warning?: number
 }
 
+/**
+ * How this project's heatmap is drawn. Absent fields keep the Marsa behaviour:
+ * top view, ground floor, architecture faded, colour filling the whole room height.
+ */
+export interface HeatmapSetup {
+  /** top looks straight down. inside looks in from a high corner, under the ceiling. */
+  camera?: 'top' | 'inside'
+  /** A storey id from the model, or ALL. Absent isolates Ground floor. */
+  floor?: string
+  /** File names to fade while the heatmap is open. Absent fades the architecture discipline. An empty list fades nothing. */
+  fadeModels?: string[]
+  /** How solid a faded model stays, from 0.15 to 0.8. Absent is 0.35. */
+  fadeAmount?: number
+  /** Pull the colour in under the ceiling so it reads inside the walls. */
+  insideWalls?: boolean
+}
+
 /** Per-project FIN settings live here. A field a project does not set falls back to the
  *  backend config.json default, so projects saved before a field existed keep working. */
 export interface ProjectApiSettings {
@@ -300,6 +317,8 @@ export interface ProjectApiSettings {
   subPanels?: Record<string, { label: string, type: string }>
   modelsConfig?: Array<{ id: string, label: string, name: string, active: boolean }>
   floorsConfig?: Array<{ id: string, label: string, name: string }>
+  /** Heatmap camera, floor, and which models fade. Absent keeps the Marsa heatmap. */
+  heatmap?: HeatmapSetup
 }
 
 /** One distribution board on the Power page */
