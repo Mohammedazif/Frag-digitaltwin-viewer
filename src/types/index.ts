@@ -283,6 +283,8 @@ export interface ProjectApiSettings {
   /** Show the prototype's demo figures (Marsa Al Arab fixture) in the dashboard. Off: only FIN
    *  readings and this project's own settings are shown. */
   dashboardDemo?: boolean
+  /** Which prototype site the demo figures come from; absent = Marsa Al Arab. Only used with dashboardDemo. */
+  dashboardDataSite?: 'medical'
   /** Reporting basis. A cost or CO₂ figure whose rate is not set is reported as unavailable. */
   energyTariff?: number
   gasTariff?: number

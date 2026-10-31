@@ -643,9 +643,18 @@ export function ProjectSettingsModal({ visible, onClose }: ProjectSettingsModalP
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
                   <input type="checkbox" checked={settings.dashboardDemo === true} style={{ width: 'auto' }}
                     onChange={e => update('dashboardDemo', e.target.checked || undefined)} />
-                  Show the prototype's demo figures (Marsa Al Arab sample data)
+                  Show the prototype's demo figures
                 </label>
                 <p className="ds-hint">Off: the dashboard shows only this project's FIN readings and settings, and modules with no FIN source (anomalies, forecast, benchmark) are hidden.</p>
+              </div>
+              <div className="ds-field">
+                <label>Demo site</label>
+                <select value={settings.dashboardDataSite || ''} disabled={settings.dashboardDemo !== true}
+                  onChange={e => update('dashboardDataSite', e.target.value || undefined)}>
+                  <option value="">Marsa Al Arab (hotel)</option>
+                  <option value="medical">Demo Medical Centre (hospital)</option>
+                </select>
+                <p className="ds-hint">The sample site the demo figures come from. The hospital opens Maintenance, Security and life safety, and ESG on its own demo data. Takes effect the next time the dashboard opens.</p>
               </div>
 
               <h3 className="ds-section-title" style={{ marginTop: '24px' }}>Weather API</h3>

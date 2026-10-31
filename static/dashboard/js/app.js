@@ -15,6 +15,19 @@
                set(k,v){ try{sessionStorage.setItem(k,v)}catch(e){} },
                del(k){ try{sessionStorage.removeItem(k)}catch(e){} } };
 
+  /* E15: a project on another demo site (Project settings > Demo site) runs on that site's data, with the Studio viewer */
+  (function pickSite(){
+    const want = (window.INJECTED_PROJECT_CONFIG || {}).dataSite, D = window.EKO_DATA || {};
+    if(!want || !D[want] || !D.marsa || D[want] === D.marsa) return;
+    const site = D[want], row = (D.portfolio || []).find(p => p.key === 'marsa');
+    site.viewer = D.marsa.viewer;
+    delete site.overviewPage;   // the medical Overview is not ported yet
+    site.entitlements = site.entitlements || {};
+    site.entitlements.modules = Object.assign({}, site.entitlements.modules, { esg: 'active', 'systems.life': 'hidden', 'systems.security': 'hidden' });
+    if(row){ row.nameEn = site.nameEn; row.nameAr = site.nameAr; }   // the top bar names the site from this row
+    D.marsa = site;
+  })();
+
   /* No data on this device (cold start offline): honest empty shell, never a
      number that could be mistaken for current (D65). */
   if(!(window.EKO_DATA && window.EKO_DATA.marsa)){
@@ -168,6 +181,14 @@
         : d.getDate() + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()] + ' ' + hm;
       return this.ph(s);
     },
+    /* E15: an acknowledgement stores when and who; its age and time derive */
+    makeAck(atMs, who){
+      const E2 = this, k = { who };
+      Object.defineProperty(k, 'atMs', { value: atMs, enumerable: false, writable: true, configurable: true });
+      Object.defineProperty(k, 'ageH', { get(){ return Math.max(0, (E2.nowMs() - atMs) / 36e5); }, enumerable: true, configurable: true });
+      Object.defineProperty(k, 'time', { get(){ return E2.clockLabel(atMs); }, enumerable: true, configurable: true });
+      return k;
+    },
     /* CLDR plural category of a count in the current language (module helper). */
     pluralCat(n){ return pluralCat(this.lang, n); },
     alarm(id){ return this.data.alarms.find(a => a.id === id) },
@@ -311,11 +332,28 @@
 
   /* 3D engine: ONE config line in the site data picks the adapter; the shell
      only ever talks to the viewer-api surface. */
-  /* E15: a fixture instant moved to the load minute (basis.asOfAt); unchanged when the site has no capture time */
+  if(window.EKO_SIM && window.EKO_SIM.boot) window.EKO_SIM.boot(E);   /* E15: the hospital's demo engine writes its figures first */
+  /* E15: a fixture instant moved to the load minute (basis.asOfAt); an alarm with raisedAt gets its age and times from it */
   (function oneClock(){
     const cap = Date.parse((E.data.basis || {}).asOfAt || '');
     const shift = isFinite(cap) ? E.nowMs() - cap : 0;
-    E.fxMs = iso => { const t = Date.parse(iso || ''); return isFinite(t) ? t + shift : null; };
+    const ms = iso => { const t = Date.parse(iso || ''); return isFinite(t) ? t + shift : null; };
+    E.fxMs = ms;
+    (E.data.alarms || []).forEach(a => {
+      const r = ms(a.raisedAt); if(r == null) return;
+      Object.defineProperty(a, 'raisedAtMs', { value: r, enumerable: false, writable: true, configurable: true });
+      Object.defineProperty(a, 'ageH', { get(){ return (E.nowMs() - r) / 36e5; }, enumerable: true, configurable: true });
+      Object.defineProperty(a, 'raised', { get(){ return E.clockLabel(r); }, enumerable: true, configurable: true });
+      if(a.ack && a.ack.at){ const k = ms(a.ack.at); if(k != null) a.ack = E.makeAck(k, a.ack.who); }
+      if(Array.isArray(a.lifecycle)) a.lifecycle = a.lifecycle.map(([step, v, done]) => {
+        const row = [step, v, done];
+        const when = step === 'Raised' ? () => E.clockLabel(r)
+          : step === 'Issued' && v && v.afterMin != null ? () => E.clockLabel(r + v.afterMin * 60000)
+          : step === 'Acknowledged' ? () => (a.ack ? a.ack.time + ' · ' + a.ack.who : E.t('emptyDash')) : null;
+        if(when) Object.defineProperty(row, 1, { get: when, enumerable: true, configurable: true });
+        if(step === 'Acknowledged') Object.defineProperty(row, 2, { get: () => !!a.ack, enumerable: true, configurable: true });
+        return row; });
+    });
   })();
 
   E.engine = window.EKO_VIEWER.create(E.data.viewer.engine || 'static');
