@@ -517,6 +517,7 @@ window.EKO_C = (function(){
        followed by the Energy Waste & Risk section (totals + share bars).
        Top opportunities and Modules do NOT live on this panel. */
     const cur = b.currency || 'AED';   /* the project's currency; no unit after a missing cost */
+    const money = !(E.sim && window.EKO_PERSONA) || window.EKO_PERSONA.money(E);   /* E16: on the hospital, AED only for a money role */
     const cards = d.kpis.map(k => {
       const st = ar ? k.stateAr : k.stateEn;
       const cost = k.costAed != null ? k.costAed : (k.wasteKwh != null && b.aedPerKwh != null ? k.wasteKwh * b.aedPerKwh : null);   /* no tariff: unknown, not 0 */
@@ -527,7 +528,7 @@ window.EKO_C = (function(){
         <p class="opttip">${esc(ar?k.tipAr:k.tipEn)}</p>
         <div class="optcells">
           <span class="optcell"><i class="optlbl">${esc(E.t('wasteLbl'))}</i><b class="tMonoS">${fmt(k.wasteKwh,1)} kWh</b></span>
-          <span class="optcell"><i class="optlbl">${esc(E.t('costLbl'))}</i><b class="tMonoS">${fmt(cost,1)}${cost == null ? '' : ' ' + esc(cur)}</b></span>
+          ${money ? `<span class="optcell"><i class="optlbl">${esc(E.t('costLbl'))}</i><b class="tMonoS">${fmt(cost,1)}${cost == null ? '' : ' ' + esc(cur)}</b></span>` : ''}
         </div></article>`;
     }).join('');
     const RAMP2 = ['#C2504B','#D07A3C','#D8A83C','#D8C63C'];
@@ -537,7 +538,7 @@ window.EKO_C = (function(){
     const totAed = d.wasteTotalAed != null ? d.wasteTotalAed : (d.wasteTotalKwh != null && b.aedPerKwh != null ? d.wasteTotalKwh * b.aedPerKwh : null);
     const wr = `<div class="alcard"><div class="alcardh"><span class="alcardt">${esc(E.t('ewrT'))}</span></div>
       <div class="row gap8"><span class="ewrtot tMonoS">${fmt(d.wasteTotalKwh,1)} kWh</span>
-        <span class="ewrtot tMonoS">${fmt(totAed,1)}${totAed == null ? '' : ' ' + esc(cur)}</span></div>
+        ${money ? `<span class="ewrtot tMonoS">${fmt(totAed,1)}${totAed == null ? '' : ' ' + esc(cur)}</span>` : ''}</div>
       ${d.kpis.map(k => {
         const risk = k.sharePct != null && isFinite(k.sharePct) ? Math.min(100, Math.max(0, k.sharePct)) : 0;
         return `<div class="ewrrow">

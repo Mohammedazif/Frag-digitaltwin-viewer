@@ -247,6 +247,7 @@ window.EKO_A = (function(){
 
   /* ------------------------------ BENCHMARK -------------------------------- */
   function benchPage(E){
+    if(window.EKO_EP && window.EKO_OPS && window.EKO_EP.applies(E)) return window.EKO_EP.benchPage(E);   /* E15: the hospital's daily energy model (js/energy-pages.js) */
     const d = E.data.bench, ar = E.lang === 'ar';
     const heroes = [
       heroTile(E, E.t('benchIntensity'), fmt(d.siteWhm2, 1), 'Wh/m²', E.t('benchIntensityCap',{t:E.data.basis.asOf})),
@@ -435,8 +436,27 @@ window.EKO_A = (function(){
       <div class="angrid39"><div class="col gap10">${evidence}${tod}</div>${rail}</div></div>`;
   }
 
+  /* E2: fit statistics of the backtest (ASHRAE Guideline 14 style measures; the guide values are shown, never "compliant") */
+  function fcstFit(bt){
+    if(!bt || !bt.actual || bt.actual.length < 30) return null;
+    const a = bt.actual, f = bt.forecast, n = a.length, mean = a.reduce((s, x) => s + x, 0) / n;
+    let se = 0, sb = 0, st = 0; const rel = [];
+    for(let i = 0; i < n; i++){ const e = a[i] - f[i]; se += e * e; sb += e; st += (a[i] - mean) ** 2; rel.push(e / f[i]); }
+    const cv = Math.sqrt(se / n) / mean * 100, nmbe = sb / (n * mean) * 100, r2 = 1 - se / st;
+    rel.sort((x, y) => x - y); const q = p => rel[Math.min(n - 1, Math.max(0, Math.round(p * (n - 1))))];
+    const G = { cv: 25, nmbe: 0.5, r2: 0.7 };
+    return { n, cv, nmbe, r2, q10: q(0.1), q90: q(0.9), G, ok: { cv: cv < G.cv, nmbe: Math.abs(nmbe) < G.nmbe, r2: r2 > G.r2 }, pass: cv < G.cv && Math.abs(nmbe) < G.nmbe && r2 > G.r2, a, f };
+  }
+  /* D182: the three fit tiles alone (the model sites draw their own full-width backtest chart) */
+  function fcstFitTiles(E, fit){
+    const t = E.t.bind(E);
+    const tile = (k, v, unit, guide, ok) => `<div class="fcfit" data-ok="${ok ? 1 : 0}"><span class="tLbl">${esc(t('fc.k.' + k))}</span><b class="tMonoS">${esc(v)}${unit}</b>
+      <span class="tCap">${esc(t('fc.guide', { g: guide }))} · ${esc(t(ok ? 'fc.meets' : 'fc.misses'))}</span></div>`;
+    return `<div class="fcfits">${tile('cv', fmt(fit.cv, 1), '%', '< 25%', fit.ok.cv)}${tile('nmbe', fmt(fit.nmbe, 2), '%', '±0.5%', fit.ok.nmbe)}${tile('r2', fmt(fit.r2, 2), '', '> 0.7', fit.ok.r2)}</div>`;
+  }
   /* ----------------------------- FORECASTING ------------------------------- */
   function fcstPage(E){
+    if(window.EKO_EP && window.EKO_OPS && window.EKO_EP.applies(E)) return window.EKO_EP.fcstPage(E);   /* E15 */
     const d = E.data.fcst, ar = E.lang === 'ar';
     const heroes = [
       heroTile(E, E.t('fcstPeakDay'), ar?d.peakDayAr:d.peakDayEn, '', E.t('fcstPeakCap',{v:fmt(d.peakMwh,1),p:d.peakPct})),
@@ -849,5 +869,5 @@ window.EKO_A = (function(){
 
   return { systemsSummary, systemsPanel, benchPage, anomPage, fcstPage,
            waterPage, gasPage, spacesSummary, assetsSummary, modRowsPanel,
-           heatPanel, heatOverlay, widget, heroTile, chrome, sysPage, lockedSummary };
+           heatPanel, heatOverlay, widget, heroTile, chrome, sysPage, lockedSummary, fcstFit, fcstFitTiles };
 })();
