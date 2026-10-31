@@ -154,6 +154,20 @@
     /* D122: a DATA phrase in the current language (paramAr whole-phrase map,
        then month/weekday tokens inside dates); English returns the string. */
     ph(x){ return this.lang === 'ar' && typeof x === 'string' && window.EKO_I18N.phrase ? window.EKO_I18N.phrase(x) : x; },
+    /* E15: people are role labels ("the shift engineer"); head = shown on its own, so it starts with a capital */
+    person(x, head){ const s = this.ph(x); if(!head || this.lang === 'ar' || typeof s !== 'string' || !s.startsWith('the ')) return s;
+      return head === 'bare' ? s.charAt(4).toUpperCase() + s.slice(5) : 'T' + s.slice(1); },
+    overviewId(){ return this.data.overviewPage || 'marsa-overview'; },
+    /* E15: "now" to the minute, and a stored instant as "HH:MM" today, "Tue 14:00" this week, "13 Sep 14:00" beyond */
+    nowMs(){ return Math.floor(Date.now() / 60000) * 60000; },
+    clockLabel(ms){
+      const d = new Date(ms), n = new Date(this.nowMs()), hm = String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+      const day = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+      const days = Math.round((day(n) - day(d)) / 864e5);
+      const s = days === 0 ? hm : days > 0 && days < 7 ? ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()] + ' ' + hm
+        : d.getDate() + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()] + ' ' + hm;
+      return this.ph(s);
+    },
     /* CLDR plural category of a count in the current language (module helper). */
     pluralCat(n){ return pluralCat(this.lang, n); },
     alarm(id){ return this.data.alarms.find(a => a.id === id) },
@@ -297,6 +311,13 @@
 
   /* 3D engine: ONE config line in the site data picks the adapter; the shell
      only ever talks to the viewer-api surface. */
+  /* E15: a fixture instant moved to the load minute (basis.asOfAt); unchanged when the site has no capture time */
+  (function oneClock(){
+    const cap = Date.parse((E.data.basis || {}).asOfAt || '');
+    const shift = isFinite(cap) ? E.nowMs() - cap : 0;
+    E.fxMs = iso => { const t = Date.parse(iso || ''); return isFinite(t) ? t + shift : null; };
+  })();
+
   E.engine = window.EKO_VIEWER.create(E.data.viewer.engine || 'static');
   E.engine.onCameraChange(() => window.EKO_V.position(E));
   E.engine.onMarkerClick(id => E.set({ born:'pop', mkPop: id, mkPopN: 0 }));   /* D128: a marker opens its popup, never the panel */
