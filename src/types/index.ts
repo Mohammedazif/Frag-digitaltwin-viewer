@@ -285,7 +285,7 @@ export interface ProjectApiSettings {
   dashboardDemo?: boolean
   /** The sample data set the demo figures come from; absent = Marsa Al Arab. Only used with dashboardDemo. */
   dashboardSampleData?: 'medical'
-  /** The dashboard's module set. 'extended' adds ESG, Maintenance, Security and life safety and the E15 components; absent = standard. */
+  /** The dashboard's module set. 'extended' adds ESG, Maintenance, and Security and life safety; absent = standard. */
   dashboardModules?: 'extended'
   /** Reporting basis. A cost or CO₂ figure whose rate is not set is reported as unavailable. */
   energyTariff?: number

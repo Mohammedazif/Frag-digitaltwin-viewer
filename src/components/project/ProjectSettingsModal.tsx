@@ -664,7 +664,7 @@ export function ProjectSettingsModal({ visible, onClose }: ProjectSettingsModalP
                   <option value="">Standard</option>
                   <option value="extended">Extended</option>
                 </select>
-                <p className="ds-hint">Extended adds ESG, Maintenance, and Security and life safety, with the E15 asset drawer and energy pages. Works with sample data or live data. Takes effect the next time the dashboard opens.</p>
+                <p className="ds-hint">Extended adds ESG, Maintenance, and Security and life safety. Works with sample data or live data. Takes effect the next time the dashboard opens.</p>
               </div>
 
               <h3 className="ds-section-title" style={{ marginTop: '24px' }}>Weather API</h3>
