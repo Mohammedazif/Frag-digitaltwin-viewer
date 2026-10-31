@@ -6,7 +6,8 @@
   window.EKO_VIEWER.register('host', function () {
     var host = null;
     var markers = [];
-    var cbs = { ready: [], error: [], camera: [], assetClick: [], markerClick: [], measure: [], section: [] };
+    var viewpoints = {}, vpSeq = 0;
+    var cbs ={ ready: [], error: [], camera: [], assetClick: [], markerClick: [], measure: [], section: [] };
     var on = function (k) { return function (cb) { cbs[k].push(cb); }; };
     var fire = function (k, arg) { cbs[k].forEach(function (f) { f(arg); }); };
     var noop = function () {};
@@ -44,8 +45,42 @@
         if (window.EKO_HOST_ENGINE && window.EKO_HOST_ENGINE.resetView) window.EKO_HOST_ENGINE.resetView();
       },
       cameraMoved: function () { return false; },
-      saveViewpoint: function () { return { id: 'vp-host' }; },
-      loadViewpoint: noop,
+      /* E15: a viewpoint is the Studio camera (captureCamera), restored with lookAtView */
+      saveViewpoint: function () {
+        var h = window.EKO_HOST_ENGINE, view = h && h.captureCamera ? h.captureCamera() : null;
+        var id = 'vp-host-' + (++vpSeq);
+        if (view) viewpoints[id] = view;
+        return { id: id };
+      },
+      loadViewpoint: function (id) {
+        var h = window.EKO_HOST_ENGINE, view = viewpoints[id && id.id ? id.id : id];
+        return !!(view && h && h.lookAtView && h.lookAtView(view));
+      },
+      flyToViewpoint: function (vp) { return this.loadViewpoint(vp); },
+      animating: function () { return false; },
+      /* E15: an engine asset names its model element (gid) or room (roomGid); the Studio finds either */
+      locatable: function (assetId) {
+        var h = window.EKO_HOST_ENGINE;
+        return !!(h && h.bimIdFor && h.bimIdFor(assetId));
+      },
+      flyToAssetAt: function (assetId) {
+        if (!this.locatable(assetId)) return false;
+        window.EKO_HOST_ENGINE.flyToAsset(assetId);
+        return true;
+      },
+      flyToGid: function (gid) {
+        if (gid && window.EKO_HOST_ENGINE && window.EKO_HOST_ENGINE.flyToAsset) window.EKO_HOST_ENGINE.flyToAsset(gid);
+      },
+      highlightGid: function (gid) {
+        var h = window.EKO_HOST_ENGINE;
+        if (!h) return;
+        if (gid && h.highlightAsset) h.highlightAsset(gid);
+        else if (!gid && h.clearHighlight) h.clearHighlight();
+      },
+      projectAsset: function (assetId) {
+        var h = window.EKO_HOST_ENGINE, p = h && h.projectPoint ? h.projectPoint({ asset: assetId }) : null;
+        return p || { x: 0, y: 0, visible: false };
+      },
       onCameraChange: on('camera'),
 
       setStyle: function (mode) {

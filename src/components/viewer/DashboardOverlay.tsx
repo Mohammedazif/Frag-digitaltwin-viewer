@@ -143,7 +143,8 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       if (mapped) return mapped
       const assets: any[] = (window as any).EKO?.data?.assets || []
       const asset = assets.find(a => a.id === assetId || normAssetId(a.id || '') === norm)
-      return isGuid(asset?.bimId) ? asset.bimId : null
+      // The hospital demo data names its element (gid) or room (roomGid) instead of bimId
+      return [asset?.bimId, asset?.gid, asset?.roomGid].find(isGuid) || null
     }
 
     /* Accepts an asset id or a raw IFC GUID */
@@ -1796,6 +1797,7 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
           target: [target.x, target.y, target.z] as [number, number, number],
         }
       },
+      lookAtView,
       isolateLevel,
       listLayers: () => layerIds(useModelStore.getState().models).map(id => ({ id, name: id })),
       isolateLayer,
