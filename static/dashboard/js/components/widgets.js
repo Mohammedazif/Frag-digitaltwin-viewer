@@ -446,7 +446,7 @@ window.EKO_C = (function(){
           ${a.ack?'':`<button class="alghost" data-act="ackAlarm" data-alarm="${a.id}">${esc(E.t('acknowledge'))}</button>`}
           <button class="alprim" data-act="openAsset" data-asset="${esc(a.asset)}">${esc(E.t('details'))}</button>
         </span>
-        <span class="alrage">${esc(a.age)}</span>
+        <span class="alrage">${esc(a.ageH != null ? E.fmtAge(a.ageH) : (a.age || ''))}</span>
         <span class="alractw" data-tip="${esc(actTip(E, a.sev))}">${esc(sevAction(E,a.sev))}</span>
       </div>`;
     };
