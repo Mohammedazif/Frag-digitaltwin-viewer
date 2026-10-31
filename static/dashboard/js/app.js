@@ -15,19 +15,26 @@
                set(k,v){ try{sessionStorage.setItem(k,v)}catch(e){} },
                del(k){ try{sessionStorage.removeItem(k)}catch(e){} } };
 
-  /* E15: a project on another demo site (Project settings > Demo site) runs on that site's data, with the Studio viewer */
-  (function pickSite(){
-    const want = (window.INJECTED_PROJECT_CONFIG || {}).dataSite, D = window.EKO_DATA || {};
-    const root = window.DASHBOARD_ROOT || document.documentElement;   // css/medical-demo.css applies only under data-demo-site
-    if(want && D[want]) root.setAttribute('data-demo-site', want); else root.removeAttribute('data-demo-site');
-    if(!want || !D[want] || !D.marsa || D[want] === D.marsa) return;
-    const site = D[want], row = (D.portfolio || []).find(p => p.key === 'marsa');
-    site.viewer = D.marsa.viewer;
-    delete site.overviewPage;   // the medical Overview is not ported yet
-    site.entitlements = site.entitlements || {};
-    site.entitlements.modules = Object.assign({}, site.entitlements.modules, { esg: 'active', 'systems.life': 'hidden', 'systems.security': 'hidden' });
-    if(row){ row.nameEn = site.nameEn; row.nameAr = site.nameAr; }   // the top bar names the site from this row
-    D.marsa = site;
+  /* E15: the project's module set and sample data (Project settings > Modules, Sample data) */
+  const MODULE_STATES = (function projectSetup(){
+    const cfg = window.INJECTED_PROJECT_CONFIG || {}, D = window.EKO_DATA || {};
+    const extended = cfg.modules === 'extended';
+    window.EKO_MODULES = extended ? 'extended' : 'standard';
+    const root = window.DASHBOARD_ROOT || document.documentElement;   // css/modules.css applies only under data-modules="extended"
+    if(extended) root.setAttribute('data-modules', 'extended'); else root.removeAttribute('data-modules');
+    const want = cfg.sampleData;
+    if(want && D[want] && D.marsa && D[want] !== D.marsa){   // the sample site's data takes the place the dashboard reads, with the Studio viewer
+      const site = D[want], row = (D.portfolio || []).find(p => p.key === 'marsa');
+      site.viewer = D.marsa.viewer;
+      delete site.overviewPage;   // its own Overview is not ported yet
+      if(row){ row.nameEn = site.nameEn; row.nameAr = site.nameAr; }   // the top bar names the site from this row
+      D.marsa = site;
+    }
+    const states = extended
+      ? { esg: 'active', maintenance: 'active', security: 'active', 'systems.life': 'hidden', 'systems.security': 'hidden' }
+      : { esg: 'available', maintenance: 'available', security: 'available' };
+    if(D.marsa){ D.marsa.entitlements = D.marsa.entitlements || {}; D.marsa.entitlements.modules = Object.assign({}, D.marsa.entitlements.modules, states); }
+    return states;
   })();
 
   /* No data on this device (cold start offline): honest empty shell, never a
@@ -334,7 +341,8 @@
 
   /* 3D engine: ONE config line in the site data picks the adapter; the shell
      only ever talks to the viewer-api surface. */
-  if(window.EKO_SIM && window.EKO_SIM.boot) window.EKO_SIM.boot(E);   /* E15: the hospital's demo engine writes its figures first */
+  if(window.EKO_SIM && window.EKO_SIM.boot) window.EKO_SIM.boot(E);   /* E15: the sample data's simulation engine writes its figures first */
+  if(E.data.entitlements && E.data.entitlements.modules) Object.assign(E.data.entitlements.modules, MODULE_STATES);   /* the module set wins over the engine */
   /* E15: a fixture instant moved to the load minute (basis.asOfAt); an alarm with raisedAt gets its age and times from it */
   (function oneClock(){
     const cap = Date.parse((E.data.basis || {}).asOfAt || '');
