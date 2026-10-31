@@ -648,13 +648,23 @@ export function ProjectSettingsModal({ visible, onClose }: ProjectSettingsModalP
                 <p className="ds-hint">Off: the dashboard shows only this project's FIN readings and settings, and modules with no FIN source (anomalies, forecast, benchmark) are hidden.</p>
               </div>
               <div className="ds-field">
-                <label>Demo site</label>
-                <select value={settings.dashboardDataSite || ''} disabled={settings.dashboardDemo !== true}
-                  onChange={e => update('dashboardDataSite', e.target.value || undefined)}>
-                  <option value="">Marsa Al Arab (hotel)</option>
-                  <option value="medical">Demo Medical Centre (hospital)</option>
+                <label>Sample data</label>
+                <select value={settings.dashboardSampleData || ''} disabled={settings.dashboardDemo !== true}
+                  onChange={e => update('dashboardSampleData', e.target.value || undefined)}>
+                  <option value="">Marsa Al Arab</option>
+                  <option value="medical">Medical centre</option>
                 </select>
-                <p className="ds-hint">The sample site the demo figures come from. The hospital opens Maintenance, Security and life safety, and ESG on its own demo data. Takes effect the next time the dashboard opens.</p>
+                <p className="ds-hint">The sample data set the figures come from while demo figures are on. Takes effect the next time the dashboard opens.</p>
+              </div>
+
+              <h3 className="ds-section-title" style={{ marginTop: '24px' }}>Modules</h3>
+              <div className="ds-field">
+                <label>Module set</label>
+                <select value={settings.dashboardModules || ''} onChange={e => update('dashboardModules', e.target.value || undefined)}>
+                  <option value="">Standard</option>
+                  <option value="extended">Extended</option>
+                </select>
+                <p className="ds-hint">Extended adds ESG, Maintenance, and Security and life safety, with the E15 asset drawer and energy pages. Works with sample data or live data. Takes effect the next time the dashboard opens.</p>
               </div>
 
               <h3 className="ds-section-title" style={{ marginTop: '24px' }}>Weather API</h3>

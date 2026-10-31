@@ -2082,9 +2082,9 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
         // The backend serves this project before the dashboard's first poll is trusted
         void useFinStore.getState().syncProjectSettings()
 
-        // A script marked data-site is another site's data: load it only for a project on that site
-        const dataSite = (window as any).INJECTED_PROJECT_CONFIG?.dataSite || null
-        const scripts = Array.from(doc.querySelectorAll('script')).filter(s => !s.dataset.site || s.dataset.site === dataSite)
+        // A script marked data-sample-data belongs to one sample data set: load it only for a project using that set
+        const sampleData = (window as any).INJECTED_PROJECT_CONFIG?.sampleData || null
+        const scripts = Array.from(doc.querySelectorAll('script')).filter(s => !s.dataset.sampleData || s.dataset.sampleData === sampleData)
         return loadScripts(scripts, signal)
       })
 
