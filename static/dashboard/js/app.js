@@ -421,6 +421,10 @@
       ${navDoc && E.state.pageId !== 'portfolio' && E.state.pageId !== 'pfsite' ? `<span aria-hidden="true" class="flexnone">/</span><button class="crumbbtn cT2" data-act="goMod" data-mod="${navDoc.id}" data-page="${esc(navDoc.pageId||'')}">${esc(E.t(navDoc.label))}</button>` : ''}
       ${(() => { const sb = navDoc && E.state.sub && (navDoc.subs||[]).find(x=>x.id===E.state.sub);
         return sb && E.state.pageId !== 'portfolio' && E.state.pageId !== 'pfsite' ? `<span aria-hidden="true" class="flexnone">/</span><span class="cT2">${esc(E.t(sb.label))}</span>` : ''; })()}
+      ${(() => { /* E15: a module running on demo data says so (site data: demo.modules, "all" or module ids, "module.sub" for one view) */
+        const dm = (E.data.demo || {}).modules, m = E.state.module, sb = E.state.sub;
+        const on = E.state.pageId !== 'portfolio' && E.state.pageId !== 'pfsite' && (dm === 'all' || (Array.isArray(dm) && (dm.includes(m) || (sb && dm.includes(m + '.' + sb)))));
+        return on ? `<span class="demochip" data-tip="${esc(E.t('demoChipTip'))}">${esc(E.t('demoChip'))}</span>` : ''; })()}
     </nav>
     <span class="tbdiv deskonly" aria-hidden="true"></span>
     <div class="tbgrp tbstatus" role="group" aria-label="${esc(E.t('alarms'))}">

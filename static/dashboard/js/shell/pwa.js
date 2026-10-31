@@ -97,7 +97,10 @@ window.EKO_PWA = (function(){
     try{
       let text = '';
       const directCfg = window.DashboardData && window.DashboardData.config;
-      if (window.DASHBOARD_OVERLAY && directCfg && directCfg.directMode) {
+      const sample = window.DASHBOARD_OVERLAY && !!(window.INJECTED_PROJECT_CONFIG || {}).sampleData;   /* E15: sample data has no live feed to watch */
+      if (sample) {
+        text = JSON.stringify({ connected: true });
+      } else if (window.DASHBOARD_OVERLAY && directCfg && directCfg.directMode) {
         if (!directCfg.project) {
           text = JSON.stringify({ connected: false });
         } else {
@@ -127,7 +130,7 @@ window.EKO_PWA = (function(){
           ts: now,
           feed: {
             status: ok ? 'ok' : 'disconnected',
-            sources: { fin: { status: ok ? 'ok' : 'disconnected', lastSample: finStamp.at } }
+            sources: sample ? {} : { fin: { status: ok ? 'ok' : 'disconnected', lastSample: finStamp.at } }
           }
         });
       }
