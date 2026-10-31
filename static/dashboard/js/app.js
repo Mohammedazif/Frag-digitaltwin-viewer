@@ -20,8 +20,6 @@
     const cfg = window.INJECTED_PROJECT_CONFIG || {}, D = window.EKO_DATA || {};
     const extended = cfg.modules === 'extended';
     window.EKO_MODULES = extended ? 'extended' : 'standard';
-    const root = window.DASHBOARD_ROOT || document.documentElement;   // css/modules.css applies only under data-modules="extended"
-    if(extended) root.setAttribute('data-modules', 'extended'); else root.removeAttribute('data-modules');
     const want = cfg.sampleData;
     if(want && D[want] && D.marsa && D[want] !== D.marsa){   // the sample site's data takes the place the dashboard reads, with the Studio viewer
       const site = D[want], row = (D.portfolio || []).find(p => p.key === 'marsa');
