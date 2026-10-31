@@ -1765,9 +1765,19 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       const tgt = view?.target
       if (!camCtl?.setLookAt || !pos || !tgt || pos.length !== 3 || tgt.length !== 3) return false
       const cam = engine.world?.camera?.three as THREE.PerspectiveCamera | undefined
+      // A straight-down view leaves orbit and pan without a direction, so they run the wrong way: tilt it as OrientationCube does
+      const target = new THREE.Vector3(tgt[0], tgt[1], tgt[2])
+      const offset = new THREE.Vector3(pos[0], pos[1], pos[2]).sub(target)
+      const dist = offset.length()
+      if (dist > 0 && Math.abs(offset.y) / dist > 0.995) {
+        offset.normalize()
+        offset.z += offset.y >= 0 ? 0.14 : -0.14
+        offset.normalize().multiplyScalar(dist)
+      }
+      const position = target.clone().add(offset)
       cam?.up.set(0, 1, 0)
       camCtl.updateCameraUp?.()
-      camCtl.setLookAt(pos[0], pos[1], pos[2], tgt[0], tgt[1], tgt[2], true)
+      camCtl.setLookAt(position.x, position.y, position.z, target.x, target.y, target.z, true)
       return true
     }
 
