@@ -1237,9 +1237,365 @@ window.EKO_C = (function(){
       <div class="aphends"><span>${esc(dateOf(hist[0], { day: 'numeric', month: 'short' }))}</span><span>${esc(dateOf(hist[n - 1], { day: 'numeric', month: 'short' }))}</span></div>`;
   }
 
+  /* E15: the drawer for the hospital's engine assets, copied from the pack (assetPanel15 is its assetPanel) */
+  /* Work-order action as a HEADER ICON (D136 footprint, D47 behaviour): ONE
+     28px slot, three states — idle (create), raising (spinner, no longer a
+     button), raised (a check that opens the Activity tab). The work-order
+     number and the confirmation sentence live in the tooltip, so the header
+     never reflows. */
+  function woIcon(E, id){
+    const t = E.t.bind(E);
+    const phase = (E.state.woPhase||{})[id];
+    const done = E.state.woRaised[id];
+    if(phase === 'raising')
+      return `<span class="iconbtn icon28 apact wobusy" role="status" aria-busy="true"
+        data-tip="${esc(t('woRaising'))}" aria-label="${esc(t('woRaising'))}"><span class="wospin" aria-hidden="true"></span></span>`;
+    if(done)
+      return `<button class="iconbtn icon28 apact wodone tipU" data-born="${E.state.woBorn===id?1:0}"
+        data-act="woOpen" data-asset="${esc(id)}"
+        data-tip="${esc(t('woRaised',{id:done}) + t('cu.lblSep') + t('apActivityTab'))}" aria-label="${esc(t('woRaised',{id:done}))}">
+        <svg class="wocheck" width="13" height="13" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20 6 9 17l-5-5"/></svg></button>`;
+    return `<button class="iconbtn icon28 apact tipU" data-act="cwo" data-asset="${esc(id)}"
+      data-tip="${esc(t('cwo'))}" aria-label="${esc(t('cwo'))}">${icon('wrench',15)}</button>`;
+  }
+  /* the other two header actions share one shape */
+  function apAct(act, id, ic, label){
+    return `<button class="iconbtn icon28 apact tipU" data-act="${act}" data-asset="${esc(id)}"
+      data-tip="${esc(label)}" aria-label="${esc(label)}">${ic === 'external' ? dicon('external',15) : icon(ic,15)}</button>`;
+  }
+
+  /* --------------------- D147: THE PANEL'S BUILDING BLOCKS ------------------
+     Two blocks only, shared with the Brief:
+       BOX  — an item that happens or can be acted on (an alarm, an event, a
+              document, a claim): header row (kind label · time), title line, one
+              short detail line, an optional value line, and an action row only
+              when an action exists. Severity edge and tint ONLY for an alarm; a
+              warning tint only where the data says so (a warranty ending); every
+              other box is neutral. Where the box leads somewhere the WHOLE box is
+              the link (a covering button); buttons inside are actions only.
+       ROW  — a fact or a reading: name at the start, value at the end,
+              emphasised (the existing two-column .aprow in a <dl>).
+     No divider lines: spacing separates rows, boxes separate items. One quiet
+     section heading style (.apsec), at most two levels. */
+  const dataAttrs = o => Object.keys(o || {}).map(k => ` data-${k}="${esc(o[k])}"`).join('');
+  /* D150: o.kicon (a glyph before the kind label) and o.hend (a control at the end of
+     the header row: the Brief's archive button) are trusted markup from the caller */
+  function pbox(o){
+    const link = o.act ? ` data-act="${esc(o.act)}"${dataAttrs(o.data)}` : '';
+    const head = (o.kind || o.time || o.hend) ? `<span class="pboxh"><span class="pboxk">${o.kicon || ''}${esc(o.kind || '')}</span>${o.time ? `<span class="pboxt tMonoS">${esc(o.time)}</span>` : ''}${o.hend || ''}</span>` : '';
+    const inner = head + `<span class="pboxti">${esc(o.title)}</span>`
+      + (o.detail ? `<span class="pboxd">${esc(o.detail)}</span>` : '')
+      + (o.value ? `<span class="pboxv"><span class="pboxvn">${esc(o.value[0])}</span><b class="tMonoS">${esc(o.value[1])}</b></span>` : '');
+    const acts = (o.actions || []).filter(Boolean);
+    const at = `${o.sev ? ` data-sev="${esc(o.sev)}"` : ''}${o.acked ? ' data-acked="1"' : ''}${o.tone ? ` data-tone="${esc(o.tone)}"` : ''}${o.sched ? ' data-sched="1"' : ''}${o.tip ? ` data-tip="${esc(o.tip)}"` : ''}`;
+    if(o.act && !acts.length && !o.hend) return `<button class="pbox pboxlink"${at}${link}>${inner}</button>`;   /* a control in the header cannot sit inside a button */
+    return `<article class="pbox"${at}>${o.act ? `<button class="pboxcover"${link} aria-label="${esc(o.title)}"></button>` : ''}${inner}${acts.length
+      ? `<span class="pboxa">${acts.map(a => `<button class="btnG btnSm" data-act="${esc(a.act)}"${dataAttrs(a.data)}>${esc(a.label)}</button>`).join('')}</span>` : ''}</article>`;
+  }
+  /* THE SPINE: past items solid, newest nearest the Now marker; scheduled items
+     dashed on the far side of Now, soonest nearest it — one time axis */
+  function spine(E, future, past){
+    const li = (o, when) => `<li class="ptli" data-when="${when}"><span class="ptldot" aria-hidden="true"></span>${pbox(o)}</li>`;
+    return `<ol class="ptl">${future.map(o => li(o, 'future')).join('')}<li class="ptlnow"><span class="ptlnowl">${esc(E.t('tlNow'))}</span></li>${past.map(o => li(o, 'past')).join('')}</ol>`;
+  }
+  const dateLbl = (E, s) => { const d = new Date(s); return isNaN(d) ? s : d.toLocaleDateString(E.lang === 'ar' ? 'ar-AE-u-nu-latn' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); };
+
+  /* --------------------- E13: an engine asset's drawer tabs ---------------------
+     Points: every point the engine produces, value, unit, band and a 24 h sparkline. Analytics: the engine's history, the point the
+     fault shows in first. O&M: the nameplate (the model first, else "Demo nameplate", each field with its source), the next planned
+     task and the service history from the work order records Activity reads, the documents (titled demo placeholders) and the spares.
+     Warranty: the dates of the demo table, labelled so. */
+  const E13 = (function(){
+    const L2 = (E, en, ar) => E.lang === 'ar' ? (ar || en) : en;
+    const day = (E, ms) => { const d = new Date(ms); return d.getDate() + ' ' + E.ph(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]) + ' ' + d.getFullYear(); };
+    const val = (E, p) => p.word ? L2(E, p.value[0], p.value[1]) : fmt(p.value, p.d) + (p.u ? ' ' + p.u : '');
+    const spark = (vals, band) => { if(!vals || vals.length < 2) return ''; const W = 72, H = 18, lo = Math.min(...vals, band ? band[0] : Infinity), hi = Math.max(...vals, band ? band[1] : -Infinity), sp = hi - lo || 1;
+      const y = v => (H - 1 - (v - lo) / sp * (H - 2)).toFixed(1);
+      return '<svg class="apspark" viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '" aria-hidden="true">' + (band ? '<rect x="0" width="' + W + '" y="' + y(Math.min(band[1], hi)) + '" height="' + Math.max(0, y(Math.max(band[0], lo)) - y(Math.min(band[1], hi))).toFixed(1) + '" class="apsparkband"/>' : '')
+        + '<polyline points="' + vals.map((v, i) => (i / (vals.length - 1) * W).toFixed(1) + ',' + y(v)).join(' ') + '"/></svg>'; };
+    function pointsTab(E, SA, id){
+      const t = E.t.bind(E), P = SA.points(id);
+      return '<p class="tCap">' + esc(t('ap13.pointsCap', { n: P.length })) + '</p><div class="appts">' + P.map(p => '<div class="appt" data-tone="' + (p.tone || '') + '" data-tip="' + esc(t('apSrcTip', { src: p.src })) + '">'
+        + '<span class="aptnb"><span class="aptn">' + esc(L2(E, p.en, p.ar)) + '</span><span class="aptb tCap">' + esc(p.band ? t('ap13.band', { a: fmt(p.band[0], p.d), b: fmt(p.band[1], p.d), u: p.u }) : (p.word ? t('ap13.state') : t('ap13.noBand'))) + '</span></span>'
+        + '<span class="aptv tMonoS">' + esc(val(E, p)) + '</span>' + (p.spark ? spark(p.spark, p.band) : '<span></span>') + '</div>').join('') + '</div>'
+        + '<p class="tCap">' + esc(t('ap13.pointsFoot')) + '</p>';
+    }
+    function chart(E, h){
+      const t = E.t.bind(E), W = 300, H = 92, pts = h.pts, vs = pts.map(p => p[1]), lo0 = Math.min(...vs, h.band ? h.band[0] : Infinity), hi0 = Math.max(...vs, h.band ? Math.min(h.band[1], Math.max(...vs) * 1.3 + 1) : -Infinity);
+      const pad = (hi0 - lo0) * 0.08 || 1, lo = lo0 - pad, hi = hi0 + pad, x = i => (i / (pts.length - 1) * W).toFixed(1), y = v => (H - (v - lo) / (hi - lo) * H).toFixed(1);
+      const band = h.band ? '<rect x="0" width="' + W + '" y="' + y(Math.min(h.band[1], hi)) + '" height="' + Math.max(0, y(Math.max(h.band[0], lo)) - y(Math.min(h.band[1], hi))) + '" class="apchband"/>' : '';
+      const v0 = vs[0], v1 = vs[vs.length - 1], hrs = Math.round((pts[pts.length - 1][0] - pts[0][0]) / 36e5), span = hrs >= 48 ? t('ap13.days', { n: Math.round(hrs / 24) }) : t('ap13.hours', { n: hrs });
+      const out = h.band ? vs.filter(v => v < h.band[0] || v > h.band[1]).length : 0;
+      const take = t(Math.abs(v1 - v0) <= Math.abs(v0) * 0.04 + 1e-9 ? 'ap13.takeFlat' : v1 > v0 ? 'ap13.takeUp' : 'ap13.takeDown', { a: fmt(v0, h.d), b: fmt(v1, h.d), u: h.u, span }) + (out ? t('cu.lblSep') + t('ap13.outN', { n: out, m: pts.length }) : '');
+      return '<section class="pcard"><h3 class="pcardt">' + esc(L2(E, h.en, h.ar)) + (h.u ? ', ' + esc(h.u) : '') + '</h3><p class="pcardk">' + esc(take) + '</p>'
+        + '<div class="apchart"><span class="tMonoS cT3">' + esc(fmt(hi0, h.d)) + '</span><svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" role="img" aria-label="' + esc(L2(E, h.en, h.ar)) + '">' + band
+        + '<polyline points="' + pts.map((p, i) => x(i) + ',' + y(p[1])).join(' ') + '" class="apchline"/></svg><span class="tMonoS cT3">' + esc(fmt(lo0, h.d)) + '</span></div>'
+        + '<p class="pcardb">' + esc(t('ap13.chartBasis', { n: pts.length, span, src: h.src }) + (h.band ? t('cu.lblSep') + t('ap13.band', { a: fmt(h.band[0], h.d), b: fmt(h.band[1], h.d), u: h.u }) : '')) + '</p></section>';
+    }
+    function chartsTab(E, SA, id, als){
+      const t = E.t.bind(E), C2 = SA.charts(id);
+      if(!C2.length){ const P = SA.points(id); return '<p class="tCap">' + esc(t('ap13.stateOnly')) + '</p>' + '<div class="appts">' + P.map(p => '<div class="appt"><span class="aptnb"><span class="aptn">' + esc(L2(E, p.en, p.ar)) + '</span><span class="aptb tCap">' + esc(p.src) + '</span></span><span class="aptv tMonoS">' + esc(val(E, p)) + '</span><span></span></div>').join('') + '</div>'; }
+      return C2.map(h => chart(E, h)).join('') + '<div class="alldisc"><button class="aplink" data-act="apFull" data-asset="' + esc(id) + '">' + esc(t('apFullLink')) + '</button></div>';
+    }
+    const srcChip = (E, k) => '<span class="apsrcchip" data-k="' + k + '">' + esc(E.t('e14.src.' + k)) + '</span>';   /* E14: the mock's labels */
+    /* E14 (mock 5): part 'plate' is the Nameplate tab, part 'om' the O&M tab; no part, both (E13) */
+    function omTab(E, SA, id, r, part){
+      const t = E.t.bind(E), M = SA.model(id), P = SA.plate(id), O2 = SA.om(id), now = E.nowMs();
+      const row = (name, v, k) => v == null || v === '' ? '' : '<div class="aprow"><dt><span class="aprown">' + esc(name) + '</span>' + srcChip(E, k) + '</dt><dd>' + esc(v) + '</dd></div>';
+      const plate = [
+        M ? row(t('apMake'), M.mfrInModel ? t('ap13.mfrWithheld') : t('ap13.mfrNone'), 'model') : '',
+        M && M.ref ? row(t('ap.model'), M.ref, 'model') : '',
+        M && M.tag ? row(t('ap13.tag'), M.tag, 'model') : '',
+        M && M.mark ? row(t('ap13.mark'), M.mark, 'model') : '',
+        M && M.dims ? row(t('ap13.void'), M.dims.join(' × ') + ' mm', 'model') : '',
+        M && M.elec ? row(t('ap13.elec'), M.elec, 'model') : '',
+        M && M.watt ? row(t('ap13.watt'), M.watt, 'model') : '',
+        !M ? row(t('apMake'), t('ap13.noModel'), 'demo') : '',
+        P.ratedKw != null ? row(t('ap13.ratedKw'), fmt(P.ratedKw, 0) + ' kW', 'demo') : '', P.ratedKva != null ? row(t('ap13.ratedKw'), fmt(P.ratedKva, 0) + ' kVA', 'demo') : '', P.ratedA != null ? row(t('ap13.ratedA'), fmt(P.ratedA, 0) + ' A', 'demo') : '',
+        P.airflow != null ? row(t('ap13.airflow'), fmt(P.airflow, 1) + ' m³/s', 'demo') : '', P.coolKw != null ? row(t('ap13.coolKw'), fmt(P.coolKw, 0) + ' kW', 'demo') : '',
+        P.capacityKw != null ? row(t('ap13.capacity'), fmt(P.capacityKw, 0) + ' kW', 'demo') : '', P.flow != null ? row(t('ap13.flow'), fmt(P.flow, 0) + ' m³/h', 'demo') : '',
+        P.volumeL != null ? row(t('ap13.volume'), fmt(P.volumeL, 0) + ' L', 'demo') : '', P.nominalBar != null ? row(t('ap13.nominal'), fmt(P.nominalBar, 1) + ' bar', 'demo') : '',
+        P.refrigerant ? row(t('ap13.refrigerant'), P.refrigerant, 'demo') : '',
+        P.installed ? row(t('ap.installed'), day(E, Date.parse(P.installed + 'T08:00:00')), 'demo') : '',
+        P.contractor ? row(t('ap13.contractor'), L2(E, P.contractor, t('ap13.contractorAr', { s: E.t('ap13.sys.' + (r.sys || 'ahu')) })), 'demo') : '',
+        r.cafm ? row(t('apCafmRec'), r.cafm, 'cmms') : ''].join('');
+      const nx = O2 && O2.next, nextTxt = nx ? (nx.id ? nx.id + t('cu.lblSep') : '') + L2(E, nx.en, nx.ar) + t('cu.lblSep') + (nx.at < now ? t('ap13.overdueD', { n: Math.round((now - nx.at) / 864e5) }) : (nx.at - now) / 36e5 < 48 ? t('tl.in', { t: E.fmtAge((nx.at - now) / 36e5) }) : day(E, nx.at)) : null;
+      const hist = O2 && O2.history.length ? '<div class="pboxes">' + O2.history.map(w => pbox({ kind: t(w.type === 'pm' ? 'ap13.pm' : 'ap13.cm'), time: day(E, w.closed), title: w.id + t('cu.lblSep') + L2(E, w.en, w.ar), detail: w.late ? t('ap13.late') : t('ap13.onTime') })).join('') + '</div>' : '<p class="tCap">' + esc(t('ap13.noHist')) + '</p>';
+      const docs = '<div class="pboxes">' + SA.docs(id).map(d2 => pbox({ kind: t('ap13.doc.' + d2.k), time: '', title: t('ap13.docTitle', { a: id, d: t('ap13.doc.' + d2.k) }), detail: t('ap13.docDemo'), actions: [{ act: 'none', label: t('ap.open') }] })).join('') + '</div>';
+      const sp = SA.spares(id), spares = sp.length ? '<dl class="aprows">' + sp.map(s => '<div class="aprow"><dt><span class="aprown">' + esc(s.en) + '</span>' + srcChip(E, 'demo') + '</dt><dd>' + esc(t('ap13.qty', { n: s.n, u: s.u })) + '</dd></div>').join('') + '</dl>' : '<p class="tCap">' + esc(t('ap13.noSpares')) + '</p>';
+      const plateHtml = '<h3 class="apsec">' + esc(t('ap13.nameplate')) + '</h3><dl class="aprows">' + plate + '</dl><p class="tCap">' + esc(t('ap13.plateFoot')) + '</p>';
+      if(part === 'plate') return plateHtml;
+      return (part === 'om' ? '' : plateHtml)
+        + '<h3 class="apsec">' + esc(t('ap.nextPm')) + '</h3>' + (nextTxt ? '<dl class="aprows"><div class="aprow"><dt><span class="aprown">' + esc(t('ap13.nextTask')) + '</span>' + srcChip(E, nx.src === 'cmms' ? 'cmms' : 'interval') + '</dt><dd>' + esc(nextTxt) + '</dd></div></dl>'
+          + (nx.src === 'interval' ? '<p class="tCap">' + esc(t('ap13.intervalNote', { n: O2.ivD })) + '</p>' : '') : '<p class="tCap">' + esc(t('ap13.noPlan')) + '</p>')
+        + '<h3 class="apsec">' + esc(t('ap13.history')) + '</h3>' + hist
+        + '<h3 class="apsec">' + esc(t('ap.docs')) + '</h3>' + docs
+        + '<h3 class="apsec">' + esc(t('ap13.spares')) + '</h3>' + spares;
+    }
+    function wtyTab(E, SA, id, r){
+      const t = E.t.bind(E), P = SA.plate(id), now = E.nowMs();
+      if(!P.warrantyEnd) return '<p class="tCap">' + esc(t('ap13.noWtyDemo')) + '</p>';
+      const end = Date.parse(P.warrantyEnd + 'T23:59:59'), days = Math.ceil((end - now) / 864e5);
+      const box = days >= 0 ? pbox({ kind: t('ap.wtyStatus'), title: t('ap.wtyIn', { d: day(E, end), n: days }), tone: days <= 90 ? 'warn' : '', detail: (days <= 90 ? t('ap.wtySoon') + t('cu.lblSep') : '') + t('ap13.demoDates') })
+        : pbox({ kind: t('ap.wtyStatus'), title: t('ap.wtyOut', { d: day(E, end) }), detail: t('ap13.demoDates') });
+      return '<div class="pboxes">' + box + '</div><dl class="aprows">'
+        + '<div class="aprow"><dt><span class="aprown">' + esc(t('ap.installed')) + '</span>' + srcChip(E, 'demo') + '</dt><dd>' + esc(day(E, Date.parse(P.installed + 'T08:00:00'))) + '</dd></div>'
+        + '<div class="aprow"><dt><span class="aprown">' + esc(t('ap13.wtyEnd')) + '</span>' + srcChip(E, 'demo') + '</dt><dd>' + esc(day(E, end)) + '</dd></div>'
+        + '<div class="aprow"><dt><span class="aprown">' + esc(t('ap.provider')) + '</span>' + srcChip(E, 'demo') + '</dt><dd>' + esc(L2(E, P.contractor || '', t('ap13.contractorAr', { s: E.t('ap13.sys.' + (r.sys || 'ahu')) }))) + '</dd></div>'
+        + '<div class="aprow"><dt><span class="aprown">' + esc(t('ap.coverage')) + '</span>' + srcChip(E, 'demo') + '</dt><dd>' + esc(t('ap13.coverage')) + '</dd></div></dl>'
+        + '<h3 class="apsec">' + esc(t('ap.claims')) + '</h3><p class="tCap">' + esc(t('ap13.noClaims')) + '</p>';
+    }
+    return { pointsTab, chartsTab, omTab, wtyTab };
+  })();
+
+  /* E13: an item of the model's register that is not connected: what it is, where, and how it would be connected; Locate in 3D */
+  function ncPanel(E, g){
+    const t = E.t.bind(E), ty = ((E.data.register || {}).types || {})[g[2]] || [g[2], g[2]], type = E.lang === 'ar' ? ty[1] : ty[0], lvl = t('lvlName', { n: g[3].slice(1) });
+    const fam = ((E.data.families || []).find(f => f.id === ty[2]) || {})[E.lang === 'ar' ? 'ar' : 'en'] || ty[2] || '';
+    return `<aside id="assetpanel" data-born="${E.state.born === 'asset' ? 1 : 0}" data-tab="nc" role="dialog" aria-label="${esc(g[1])}">
+      <div class="draghandle"></div>
+      <div class="aphead"><span class="tMono grow fw6" data-tip="${esc(g[1])}" data-tipif="trunc">${esc(g[1])}</span>
+        <span class="apacts" role="group" aria-label="${esc(t('apActions'))}">${apAct('locate', g[1], 'box', t('locate3d'))}</span>
+        <button class="iconbtn icon26" data-act="closeAsset" aria-label="${esc(t('close'))}">${icon('x', 12)}</button></div>
+      <div class="apctx">${esc(type)} · ${esc(lvl)}</div>
+      <div class="apbody"><div class="pboxes">${pbox({ kind: t('reg13.nc'), title: t('reg13.ncTitle'), detail: t('reg13.ncBody', { type, level: lvl }) })}</div>
+        <dl class="aprows"><div class="aprow"><dt><span class="aprown">${esc(t('reg13.gid'))}</span></dt><dd class="tMonoS">${esc(g[0])}</dd></div>
+        <div class="aprow"><dt><span class="aprown">${esc(t('reg13.sysF'))}</span></dt><dd>${esc(fam)}</dd></div></dl></div></aside>`;
+  }
+
+  /* ------------------------------ asset panel ------------------------------
+     D147 — ONE STRUCTURE ACROSS EVERY TAB (replaces the D136 row-only anatomy).
+     HEADER: asset code, the three actions (Locate in 3D · Create work order ·
+     Open in CAFM) as 28px icons, Ask EKO, expand and close — no alarm chip:
+     severity lives on the Alarms tab's badge, coloured by the worst active
+     severity (neutral with none). CONTEXT: location · zone · plain-language
+     type. TABS, each leading with what matters most:
+       Alarms    — alarm boxes (worst severity, then oldest), each with its
+                   triggering reading; then the other readings as rows
+       Activity  — the asset's history on the spine, newest first; scheduled
+                   items dashed past the Now marker
+       Analytics — one chart per card (title, takeaway, chart, basis), the chart
+                   tied to an active alarm first; Full analytics at the end
+       O&M       — key facts as rows; documents as boxes; the maintenance
+                   schedule as boxes, due-soon first
+       Warranty  — the status box; the terms as rows; claims as boxes
+       Control   — its own structure and PIN flow, on the same rules
+     Nothing appears twice within a tab; an empty part says so in one line.
+     Desktop has no footer; the PHONE SHEET keeps its sticky footer (D42) and
+     hides the header action group, so an action is never offered twice. */
+  /* E15: an engine record's source goes in the row's tooltip, the D182 row style (no chip) */
+  function tipRows(E, html){
+    return String(html).replace(/<div class="aprow"><dt><span class="aprown">([^<]*)<\/span><span class="apsrcchip" data-k="([a-z]+)">([^<]*)<\/span><\/dt>/g,
+      (m, name, k, lbl) => '<div class="aprow" data-tip="' + esc(E.t('ap15.src', { s: lbl })) + '"><dt><span class="aprown">' + name + '</span></dt>');
+  }
+  /* E15: the prediction as a KPI tile at the top of Analytics: days to limit, the range, the trend to the limit, one action.
+     The method and the stand-in note are in the tooltip; the tile opens the prediction page. */
+  function kpi15(E, id){
+    const PV = window.EKO_PROVE, t = E.t.bind(E); if(!PV) return '';
+    const p = PV.predictFor(E, id).find(x => x.state === 'drift'); if(!p) return '';
+    const wo = ((E.data.maintenance || {}).wos || []).filter(w => w.asset === id && !w.closedH && w.state !== 'done')[0];
+    const tip = [t('ap15.fit', { d: p.lookbackD, r2: fmt(p.r2, 2) }), p.standIn ? t('pv.standIn') : ''].filter(Boolean).join(' · ');
+    return `<section class="pcard ap15kpi" data-tip="${esc(tip)}">
+      <button class="ap15k" data-act="e14Predict" data-v="${esc(id)}" aria-label="${esc(t('ap15.days') + ' ' + Math.round(p.days))}"><span class="ovklbl">${esc(t('ap15.days'))}</span>
+        <span class="ovkval"><span class="ovknum">${esc(fmt(Math.round(p.days), 0))}</span></span><span class="ovkcap">${esc(t('ap15.range', { lo: p.daysLo, hi: p.daysHi }))}</span></button>
+      <div class="ap15tr">${PV.projChart(p, 150, 56)}</div>
+      ${wo ? `<button class="btnG btnSm ap15act" data-act="woOpen" data-asset="${esc(id)}">${esc(t('br14c.openWo', { wo: wo.id }))}</button>` : ''}</section>`;
+  }
+  function assetPanel15(E){
+    const id = E.state.assetSel;
+    if(!id) return '';
+    const r = E.data.assets.find(a => a.id === id) || (window.EKO_MT && window.EKO_MT.meterAsAsset(E, id));   /* D96: a meter row opens here too */
+    if(!r){ const g = ((E.data.register || {}).rows || []).find(x => x[1] === id); return g ? ncPanel(E, g) : ''; }   /* E13: an item of the register that is not connected */
+    const SEV = { critical: 3, high: 2, medium: 1 };
+    const als = (r.alarms||[]).map(x=>E.alarm(x)).filter(Boolean).sort((a, b) => (SEV[b.sev] - SEV[a.sev]) || (b.ageH - a.ageH));
+    const worst = als[0] || null;
+    const t = E.t.bind(E), arL = E.lang === 'ar';
+    const ctl = window.EKO_CTL && window.EKO_CTL.showsControl(E, r);
+    let tab = E.state.apTab;
+    /* E13: an asset of the building data engine: its points, charts, nameplate, record and warranty (js/sim/medical-assets.js) */
+    const SA = window.EKO_SIMA && window.EKO_SIMA.of(E), eng = !!(SA && SA.has(id));
+    /* E15: the D182 tabs for every asset (Alarms, Activity, Analytics, O&M, Warranty, Control); an engine asset's depth sits inside them */
+    if(!['alarms','activity','analytics','om','warranty','control'].includes(tab)) tab = 'alarms';
+    if(tab === 'control' && !ctl) tab = 'alarms';
+    const trP = x => E.ph(x);
+    const L2 = (en, ar) => arL ? (ar || en) : en;
+    const cap1 = x => x[0].toUpperCase() + x.slice(1);
+    /* technical detail: always for a technical role, on request for a plain one */
+    const techOn = E.wording() === 'technical' || E.disclose('tech');
+    /* THE row: two columns. `val` and `sub` are plain text; `valX` is markup. */
+    const row = (name, val, o) => { o = o || {};
+      const sub = o.sub || (o.src && techOn ? trP(o.src) : '');
+      return `<div class="aprow"${o.src?` data-tip="${esc(t('apSrcTip',{ src: trP(o.src) }))}"`:''}>
+        <dt><span class="aprown">${esc(name)}</span>${sub ? `<span class="apsrc">${esc(sub)}</span>` : ''}</dt>
+        <dd>${o.valX || esc(val)}</dd></div>`; };
+    const rows = html => `<dl class="aprows">${html}</dl>`;
+    const sec = label => `<h3 class="apsec">${esc(label)}</h3>`;
+    const empty = key => `<p class="apempty">${esc(t(key))}</p>`;
+    const dash = v => v == null || v === '' ? t('emptyDash') : v;
+    const now = Date.now(), H = 36e5;
+    let body = '';
+
+    if(tab === 'alarms'){
+      /* the reading that triggered each alarm sits in its box, and only there */
+      const params = r.params || [], used = new Set();
+      const trig = a => { const tech = ((a.techEn || '') + ' ' + (a.plainEn || '')).toLowerCase();
+        const i = params.findIndex((p, j) => !used.has(j) && tech.includes(String(p[0]).toLowerCase())); if(i >= 0) used.add(i); return i >= 0 ? params[i] : null; };
+      const boxes = als.map(a => { const L = E.alarmLines(a, true), p = trig(a);
+        /* the title is the plain line in every wording: the reading is the value line, and nothing is said twice */
+        return pbox({ kind: t('ap.alarmKind.' + a.sev), time: E.fmtAge(a.ageH), title: L2(a.plainEn, a.plainAr) || L.main,
+          detail: a.ack ? t('ackShort', { time: a.ack.time, who: E.person(a.ack.who) }) : t('apUnack'),
+          value: p ? [trP(p[0]), p[2]] : [t('ap.reading'), L2(a.techEn, a.techAr)], sev: a.sev, acked: !!a.ack,
+          tip: p && p[1] ? t('apSrcTip', { src: trP(p[1]) }) : '',
+          actions: a.ack ? [] : [{ act: 'ackAlarm', data: { alarm: a.id }, label: t('acknowledge') }] }); }).join('');
+      const rest = params.map((p, j) => used.has(j) ? '' : row(trP(p[0]), p[2], { src: p[1] })).join('');
+      /* D161: what is coming for this asset — a reading projected to its alarm limit,
+         or the stated reason there is no reliable trend */
+      /* E15: the prediction lives on Analytics (its KPI tile) and on its own page, not here */
+      const predHtml = '';
+      body = (als.length ? `<div class="pboxes">${boxes}</div>` : empty('ap.noAlarms'))
+        + predHtml
+        + (rest ? sec(t('ap.readings')) + rows(rest) : (!params.length ? sec(t('ap.readings')) + empty('ap.noReadings') : ''))
+        + (rest && E.wording() === 'plain' ? `<div class="alldisc"><button class="statlink" data-act="disclose" data-k="tech" aria-pressed="${E.disclose('tech')}">${esc(t(E.disclose('tech') ? 'hideTech' : 'discloseTech'))}</button></div>` : '');
+    } else if(tab === 'activity'){
+      /* D180 (A6): two sources only, the FIN alarm history and the CMMS work order history (js/activity.js) */
+      body = window.EKO_ACT ? window.EKO_ACT.tab(E, r, als) : empty('ap.noActivity');
+    } else if(tab === 'analytics' && eng){
+      /* E15: the KPI tile (days to limit), the proved fix as in D182, the charts, then the points in the D182 row style */
+      const PVa = window.EKO_PROVE, vfs = PVa ? PVa.verifiedFor(E, id) : [];
+      const pts = SA.points(id).map(p => row(L2(p.en, p.ar), p.word ? L2(p.value[0], p.value[1]) : fmt(p.value, p.d) + (p.u ? ' ' + p.u : ''), { sub: p.band ? t('ap13.band', { a: fmt(p.band[0], p.d), b: fmt(p.band[1], p.d), u: p.u || '' }) : '' })).join('');
+      body = kpi15(E, id)
+        + (vfs.length ? sec(t('pv.proved')) + `<div class="pboxes">${vfs.map(v => PVa.provedBlock(E, v)).join('')}</div>` : '')
+        + E13.chartsTab(E, SA, id, als)
+        + (pts ? sec(t('ap13.points')) + rows(pts) : '');
+    } else if(tab === 'om' && eng){
+      /* E15: the Nameplate on top, in the D182 rows; each row's source in its tooltip */
+      body = tipRows(E, E13.omTab(E, SA, id, r, 'plate')) + tipRows(E, E13.omTab(E, SA, id, r, 'om'));
+    } else if(tab === 'warranty' && eng){
+      body = tipRows(E, E13.wtyTab(E, SA, id, r));
+    } else if(tab === 'analytics'){
+      /* one chart per card: title · takeaway · chart · basis — the chart tied to an active alarm first */
+      const cards = [];
+      const tr7 = r.trend7 && Array.isArray(r.trend7.vals) && r.trend7.vals.length >= 2 ? r.trend7 : null;
+      if(tr7){ const vals = tr7.vals, v0 = vals[0], v1 = vals[vals.length - 1], u = tr7.unit || '';
+        const dp = Math.max(...vals.map(v => (String(v).split('.')[1] || '').length));
+        const k = Math.abs(v1 - v0) < Math.abs(v0) * 0.05 ? 'ap.takeFlat' : v1 > v0 ? 'ap.takeUp' : 'ap.takeDown';
+        const src = ((r.params || []).find(p => String(p[0]).toLowerCase() === String(tr7.point).toLowerCase()) || [])[1];
+        const pt = window.ekoTrend(vals, 240, 56);
+        const tied = als.some(a => ((a.techEn || '') + ' ' + (a.plainEn || '')).toLowerCase().includes(String(tr7.point).toLowerCase()));
+        cards.push({ tied, html: `<section class="pcard">
+          <h3 class="pcardt">${esc(trP(tr7.point))}</h3>
+          <p class="pcardk">${esc(t(k, { a: fmt(v0, dp), b: fmt(v1, dp), u, n: vals.length }))}</p>
+          <div class="systrend"><svg viewBox="0 0 240 56" preserveAspectRatio="none" role="img" aria-label="${esc(trP(tr7.point))}"><path d="${pt.area}" fill="var(--accT)"/><path d="${pt.line}" fill="none" stroke="var(--acc)" stroke-width="1.5"/></svg></div>
+          <p class="pcardb">${esc(t('ap.chartBasis', { n: vals.length, lo: fmt(Math.min(...vals), dp), hi: fmt(Math.max(...vals), dp), u }) + (src ? t('cu.lblSep') + trP(src) : ''))}</p></section>` }); }
+      cards.sort((a, b) => b.tied - a.tied);
+      const reason = r.st === 'stale' ? 'ap.noChart.stale' : (r.trendKind === 'state' ? 'ap.noChart.state' : 'ap.noChart.none');
+      body = (cards.length ? cards.map(c => c.html).join('') : `<p class="apempty">${esc(t(reason))}</p>`)
+        + `<div class="alldisc"><button class="aplink" data-act="apFull" data-asset="${esc(id)}">${esc(t('apFullLink'))}</button></div>`;
+    } else if(tab === 'om'){
+      const la = E.data.lookahead || {};
+      const sched = [].concat(
+        (la.pm || []).filter(x => x.asset === id).map(x => ({ id: x.id, task: L2(x.taskEn, x.taskAr), at: now + x.dueH * H })),
+        (r.pmPlan || []).map(x => ({ id: x.id, task: L2(x.taskEn, x.taskAr), at: new Date(x.due + 'T08:00:00').getTime() })))
+        .filter(x => x.at > now).sort((a, b) => a.at - b.at);
+      const whenOf = ms => (ms - now) / H < 48 ? t('tl.in', { t: E.fmtAge((ms - now) / H) }) : dateLbl(E, new Date(ms).toISOString());
+      body = rows(row(t('apMake'), dash(r.make)) + row(t('ap.model'), dash(r.model)) + row(t('apSerial'), dash(r.serial))
+          + row(t('ap.installed'), r.installed ? dateLbl(E, r.installed) : t('emptyDash')) + row(t('apSvc'), dash(r.svc ? trP(r.svc) : ''))
+          + row(t('ap.nextPm'), sched[0] ? whenOf(sched[0].at) : t('emptyDash'))
+          + row(t('apCafmRec'), '', { valX: r.cafm ? `<button class="aplink" aria-disabled="true" data-tip="${esc(t('apCafmOpen'))}">${esc(r.cafm)}</button>` : esc(t('emptyDash')) }))
+        + sec(t('ap.docs'))
+        + ((r.omDocs && r.omDocs.length) ? `<div class="pboxes">${r.omDocs.map(d2 => pbox({ kind: L2(d2.typeEn, d2.typeAr) || t('ap.doc'), time: d2.date ? dateLbl(E, d2.date) : '',
+            title: L2(d2.tEn, d2.tAr), actions: [{ act: 'none', label: t('ap.open') }] })).join('')}</div>` : empty('ap.noDocs'))
+        + sec(t('ap.schedule'))
+        + (sched.length ? `<div class="pboxes">${sched.map(x => pbox({ kind: t('tl.pm', { id: x.id }), time: whenOf(x.at), title: x.task, act: 'none', tip: t('apCafmOpen') })).join('')}</div>` : empty('ap.noSchedule'));
+    } else if(tab === 'warranty'){
+      const end = r.wtyEnd ? new Date(r.wtyEnd + 'T23:59:59') : null;
+      const days = end ? Math.ceil((end.getTime() - now) / 864e5) : null;
+      const status = end
+        ? (days >= 0 ? pbox({ kind: t('ap.wtyStatus'), title: t('ap.wtyIn', { d: dateLbl(E, r.wtyEnd), n: days }), tone: days <= 90 ? 'warn' : '', detail: days <= 90 ? t('ap.wtySoon') : '' })
+                     : pbox({ kind: t('ap.wtyStatus'), title: t('ap.wtyOut', { d: dateLbl(E, r.wtyEnd) }) }))
+        : empty('ap.noWty');
+      const w = r.warrantyTerms;
+      body = `<div class="pboxes">${status}</div>`
+        + (w ? rows(row(t('ap.provider'), L2(w.providerEn, w.providerAr)) + row(t('ap.contract'), w.contract || t('emptyDash')) + row(t('ap.coverage'), L2(w.coverageEn, w.coverageAr) || t('emptyDash'))) : (end ? empty('ap.noTerms') : ''))
+        + sec(t('ap.claims'))
+        + ((r.claims && r.claims.length) ? `<div class="pboxes">${r.claims.map(c => pbox({ kind: t('ap.claim', { id: c.id }), time: c.date ? dateLbl(E, c.date) : '', title: L2(c.tEn, c.tAr), detail: t('ap.claimSt.' + c.state) })).join('')}</div>` : empty('ap.noClaims'));
+    } else if(tab === 'control'){
+      body = window.EKO_CTL.controlTab(E, r);
+    }
+    /* the Alarms tab's badge carries the severity: the worst active one, neutral with none */
+    const badge = `<span class="cbadge" data-sev="${worst ? worst.sev : 'none'}">${als.length}</span>`;
+    /* D180: the proved result of a fix lives on the Analytics tab (the Activity tab is the two sources only) */
+    if(tab === 'analytics' && window.EKO_PROVE && !eng){ const vfs = window.EKO_PROVE.verifiedFor(E, id);
+      if(vfs.length) body = sec(t('pv.proved')) + `<div class="pboxes">${vfs.map(v => window.EKO_PROVE.provedBlock(E, v)).join('')}</div>` + body; }
+    const tabBtn = (k, lbl, extra) => `<button class="aptab" data-on="${tab===k}" data-act="apTab" data-v="${k}">${esc(lbl)}${extra||''}</button>`;
+    return `<aside id="assetpanel" data-born="${E.state.born==='asset'?1:0}" data-wide="${E.state.apWide?1:0}" data-tab="${tab}" role="dialog" aria-label="${esc(id)}">
+      <div class="draghandle"></div>
+      <div class="aphead">
+        <span class="tMono grow fw6" data-tip="${esc(id)}" data-tipif="trunc">${esc(id)}</span>
+        <span class="apacts" role="group" aria-label="${esc(t('apActions'))}">
+          ${apAct('locate', id, 'box', t('locate3d'))}${woIcon(E, id)}${apAct('none', id, 'external', t('apCafmOpen'))}</span>
+        <button class="iconbtn icon26 aibtn tipU" data-act="aiOpen" data-ai-label="${esc(id)}" data-ai-topic="alarms" data-ai-cap="${esc(arL?(r.levelAr||r.level):r.level)}" data-tip="${esc(t('ai.about'))}" aria-label="${esc(t('ai.about'))}">${icon('spark',16)}</button>
+        <button class="iconbtn icon26" data-act="apWide" data-on="${E.state.apWide?1:0}" aria-pressed="${E.state.apWide?'true':'false'}" aria-label="${esc(t('mpExpand'))}">${icon('maximize',14)}</button>
+        <button class="iconbtn icon26" data-act="closeAsset" aria-label="${esc(t('close'))}">${icon('x',12)}</button>
+      </div>
+      <div class="apctx" data-tip="${esc(arL?(r.levelAr||r.level):r.level)} · ${esc(arL?(r.zoneAr||r.zone):r.zone)}" data-tipif="trunc">${esc(arL?(r.levelAr||r.level):r.level)} · ${esc(arL?(r.zoneAr||r.zone):r.zone)} · ${esc(arL?(r.typeAr||r.typeEn||''):(r.typeEn||''))}</div>
+      <div class="aptabs">${tabBtn('alarms', t('apAlarms'), badge)}${tabBtn('activity', t('apActivityTab'))}${tabBtn('analytics', t('apFullT'))}${tabBtn('om', t('apOmTab'))}${tabBtn('warranty', t('apWtyTab'))}${ctl?tabBtn('control', t('apControlTab')):''}</div>
+      <div class="apbody">${body}</div>
+      <div class="apfoot apfootmob">
+        ${E.state.woRaised[id] || (E.state.woPhase||{})[id]
+          ? `${woBtn(E, id)}<button class="btnG" data-act="locate" data-asset="${esc(id)}">${esc(t('locate3d'))}</button>`
+          : `<button class="btnP" data-act="cwo" data-asset="${esc(id)}">${esc(t('cwo'))}</button>
+             <button class="btnG" data-act="locate" data-asset="${esc(id)}">${esc(t('locate3d'))}</button>`}
+        <button class="btnG apcafm" aria-disabled="true" data-tip="${esc(t('apCafmOpen'))}" aria-label="${esc(t('apCafmOpen'))}">${dicon('external',15)}</button>
+      </div></aside>`;
+  }
+
   function assetPanel(E){
     const id = E.state.assetSel;
     if(!id) return '';
+    if(E.sim) return assetPanel15(E);   /* E15: the hospital's engine data */
     const r = E.data.assets.find(a => a.id === id) || (window.EKO_MT && window.EKO_MT.meterAsAsset(E, id))   /* D96: a meter row opens here too */
       || alarmAsAsset(E, id);   /* an alarm's equipment the register does not list yet */
     if(!r) return '';
@@ -1491,7 +1847,7 @@ window.EKO_C = (function(){
   }
   const kwhBasis = (E, kwh, tb) => E.t('basisKwh', { kwh: fmt(kwh, kwh < 100 ? 2 : 0), basis: tb.text });
 
-  return { esc, fmt, icon, dicon, tariffBasis, emissionBasis, kwhBasis, aiBtn, ctl, sevGlyph, sevAction, sevTipFor, actTip, sparkPath, ribbon, woBtn, brandLogo, utilitiesSummary, mkEye,
+  return { esc, fmt, icon, dicon, tariffBasis, emissionBasis, kwhBasis, pbox, spine, aiBtn, ctl, sevGlyph, sevAction, sevTipFor, actTip, sparkPath, ribbon, woBtn, brandLogo, utilitiesSummary, mkEye,
            execSummary, energySummary, alarmModPanel, energyModPanel,
            powerPage, consModelPanel, utilitiesPanel, registerTable, assetPanel, summaryShell, treeShell, modShell };
 })();
