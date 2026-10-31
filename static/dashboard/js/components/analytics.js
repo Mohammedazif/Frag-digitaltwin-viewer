@@ -230,7 +230,7 @@ window.EKO_A = (function(){
     widgets.push(widget(E, E.t('activeAlarms'),
       E.t('nActiveSys',{n:alarms.length,sys:ar?g.labelAr:g.labelEn}),
       alarms.length ? `<div class="allist">${alarmRows(E, alarms)}</div>`
-                    : `<p class="alempty">${esc(E.t('allClear'))}</p>`));
+                    : `<p class="alempty">${esc(E.t('allClearShort'))}</p>`));
     return page(E, heroes, `<div class="pwgrid">${widgets.join('')}</div>`, 'sys');
 
   }
@@ -248,13 +248,13 @@ window.EKO_A = (function(){
   /* ------------------------------ BENCHMARK -------------------------------- */
   function benchPage(E){
     if(window.EKO_EP && window.EKO_OPS && window.EKO_EP.applies(E)) return window.EKO_EP.benchPage(E);   /* E15: a site with a daily energy model (js/energy-pages.js) */
-    const d = E.data.bench, ar = E.lang === 'ar';
+    const d = E.data.bench || {}, ar = E.lang === 'ar', benchRows = Array.isArray(d.rows) ? d.rows : [];   /* a site benchmarked against its design has no rows here */
     const heroes = [
       heroTile(E, E.t('benchIntensity'), fmt(d.siteWhm2, 1), 'Wh/m²', E.t('benchIntensityCap',{t:E.data.basis.asOf})),
       heroTile(E, E.t('benchHighest'), d.highestEn, '', ar?d.highestNoteAr:d.highestNote),
       heroTile(E, E.t('benchInBand'), d.inBand, '', ar?d.inBandListAr:d.inBandListEn)];
-    const maxV = Math.max(...d.rows.map(r=>r.bandHi), ...d.rows.map(r=>r.whm2)) * 1.15;
-    const rows = d.rows.map(r => {
+    const maxV = Math.max(...benchRows.map(r=>r.bandHi), ...benchRows.map(r=>r.whm2)) * 1.15;
+    const rows = benchRows.map(r => {
       return `<div class="benchrow">
         <span class="benchsys">${esc(ar?(r.sysAr||r.sysEn):r.sysEn)}</span>
         <span class="benchbar">
@@ -683,13 +683,15 @@ window.EKO_A = (function(){
   function assetsSummary(E){
     const counts = E.alarmCounts(), inAlarm = counts.assets;
     const critAssets = inAlarm.filter(a => (a.alarms || []).some(id => { const al = E.alarm(id); return al && al.sev === 'critical' && !al.ack; }));
+    const wos = (E.data.landing || {}).wosSynced;
+    const wosTxt = typeof wos === 'number' ? String(wos) : '--';
     const row = (lbl,v,cap,tone) => `<div class="ovk"><div class="ovkhead"><span class="ovklbl">${esc(lbl)}</span></div>
       <div class="ovkval"><span class="ovknum" ${tone?'style="color:var(--sevCrit)"':''}>${esc(v)}</span></div>
       <div class="ovkcap">${esc(cap)}</div></div>`;
     return C().summaryShell(E, E.t('assetsOverview'), '<div class="ovklist">'
       + row(E.t('asRegistered'), fmt(E.data.registerTotal, 0), E.t('asRegisteredCap'))
-      + row(E.t('asWos'), '--', E.t('asWosCap'))
-      + row(E.t('asInAlarm'), String(inAlarm.length), E.t('asInAlarmAlerts',{n:counts.active}) + ' · ' + E.t('asInAlarmCap',{n:critAssets.length,first:critAssets[0]?critAssets[0].id:'—'}), true)
+      + row(E.t('asWos'), wosTxt, E.t('asWosCap'))
+      + row(E.t('asInAlarm'), String(inAlarm.length), E.t('asInAlarmCap',{n:critAssets.length,first:critAssets[0]?critAssets[0].id:'—'}), true)
       + '</div>');
   }
   /* Module-highlight rows panel (Utilities / Spaces / Assets landings). */

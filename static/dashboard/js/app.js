@@ -206,8 +206,11 @@
     initials(){ return String((this.data.user || {}).name || '').trim().split(/\s+/).filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase(); },
     wording(){ return this.roleCfg().wording || 'plain'; },
     disclose(k){ const o = this.state.disclose || {}; return (k in o) ? !!o[k] : !!((this.roleCfg().disclose || {})[k]); },
-    landing(){ const c = this.roleCfg(); const l = c.landing === 'auto' ? ((this.data.sites || []).length > 1 ? 'portfolio' : 'site') : (c.landing || 'site');
-      return l === 'portfolio' ? { pageId:'portfolio', module:'overview' } : { pageId:'marsa-overview', module:'overview' }; },
+    landing(){
+      const P = window.EKO_PERSONA;
+      if(P && P.landing){ const pl = P.landing(this); if(pl && window.EKO_LAYOUTS && window.EKO_LAYOUTS[pl.pageId]) return pl; }
+      const c = this.roleCfg(); const l = c.landing === 'auto' ? ((this.data.sites || []).length > 1 ? 'portfolio' : 'site') : (c.landing || 'site');
+      return l === 'portfolio' ? { pageId:'portfolio', module:'overview' } : { pageId: this.overviewId(), module:'overview' }; },
     /* one place for alarm wording: plain roles read the plain line with the technical string beneath;
        compact surfaces show that second line only when "Show technical detail" is on */
     /* Cut after two decimal places. 23.316 stays 23.31. */
@@ -583,7 +586,7 @@
       /* D85/D107: the account MENU — headed sections, a description under every setting. */
       const seg = (grp, v, lbl, on, tip) => `<button class="seg" data-on="${on}" data-act="${grp}" data-v="${v}" aria-pressed="${on}"${tip ? ` data-tip="${esc(tip)}"` : ''}>${esc(lbl)}</button>`;
       const u = E.data.user || {};
-      const roleKey = { technician:'roleTechnician', engineer:'roleEngineer', executive:'roleExecutive' }[E.role()] || 'roleTechnician';
+      const roleKey = { technician:'roleTechnician', engineer:'roleEngineer', executive:'roleExecutive', security:'roleSecurity', manager:'roleManager' }[E.role()] || 'roleTechnician';
       const previewing = !!E.state.rolePreview && E.state.rolePreview !== u.role;
       /* D129: the account menu is IDENTITY and ACCOUNT ACTIONS — name and role, Sign out — plus the demo
          section in demo builds. Theme is the top-bar toggle and Settings › Appearance; language is the
@@ -597,8 +600,8 @@
       <div class="dlg dlgdrop dropEnd accmenu" data-born="${E.state.born==='dlg'?1:0}" role="menu" aria-label="${esc(E.t('accountTip'))}">
         <div class="draghandle"></div>
         <div class="accid"><span class="avatar accavatar" aria-hidden="true">${esc(E.initials() || '·')}</span><div class="col accwho"><b>${esc(E.lang==='ar' ? (u.nameAr||u.name||'') : (u.name||''))}</b><span class="accrole">${esc(E.t(roleKey))}${previewing ? ` <span class="accprev">${esc(E.t('rolePreviewTag'))}</span>` : ''}</span></div></div>
-        ${demo ? `<div class="accdemobox" data-tip="${esc(E.t('demoRoleNote'))}"><span class="accdemolbl"><span class="accdemotag">${esc(E.t('menuDemo'))}</span>${esc(E.t('demoRole'))}</span>
-          <div class="segbox row accsegs">${['technician','engineer','executive'].map(r => seg('rolePreview', r, E.t({ technician:'roleTechnician', engineer:'roleEngineer', executive:'roleExecutive' }[r]), E.role() === r)).join('')}</div></div>` : ''}
+        ${demo ? `<div class="accdemobox" data-tip="${esc(E.t('demoRoleNote'))}"><span class="accdemolbl"><span class="accdemotag">${esc(E.t('menuDemo'))}</span>${esc(E.t(window.EKO_PERSONA ? 'per.viewAs' : 'demoRole'))}</span>
+          ${window.EKO_PERSONA ? window.EKO_PERSONA.menu(E) : `<div class="segbox row accsegs">${['technician','engineer','executive'].map(r => seg('rolePreview', r, E.t({ technician:'roleTechnician', engineer:'roleEngineer', executive:'roleExecutive' }[r]), E.role() === r)).join('')}</div>`}</div>` : ''}
         <div class="accfoot"><button class="btnG accsignout" role="menuitem" data-act="signOut" data-tip="${esc(E.t('signOutD'))}">${esc(E.t('signOut'))}</button></div>
       </div>`;
     } else if(d === 'report'){
@@ -1262,6 +1265,10 @@
     discloseOff(el){ const k = el.dataset.v || el.dataset.k; E.state.disclose[k] = false; saveDisclose(); render(); },
     rolePreview(el){ const r = el.dataset.v; E.state.rolePreview = r === (E.data.user || {}).role ? null : r; ss.set('eko-role-preview', E.state.rolePreview || '');
       E.state.disclose = loadDisclose(); E.state.dlg = null; const l = E.landing(); E.go(l.pageId, l.module, null); },
+    viewAs(el){ const P = window.EKO_PERSONA; if(!P || !P.set(E, el.dataset.v)) return;
+      E.state.dlg = null; E.state.ovpMin = false; E.state.assetSel = null;
+      const l = P.landing(E) || E.landing(); const ok = !!(window.EKO_LAYOUTS && window.EKO_LAYOUTS[l.pageId]);
+      E.go(ok ? l.pageId : E.overviewId(), ok ? l.module : 'overview', ok ? (l.sub || null) : null); },
     dlg(el){ const r = el.getBoundingClientRect();
       E.state.dlgAnchor = (r.left + r.right) / 2;
       E.state.dlgAnchorBottom = r.bottom;
@@ -1706,7 +1713,8 @@
   if(E.state.rolePreview && !(E.data.roles || {})[E.state.rolePreview]) E.state.rolePreview = null;
   if(window.EKO_DG){ window.EKO_DG.specs.assets = window.EKO_GRIDS.assets(E); window.EKO_DG.specs.portfolio = window.EKO_GRIDS.portfolio(E); window.EKO_DG.init(E); }   /* D100 — registered before the first render: a role may land on the portfolio (D105) */
   if(window.EKO_PF) window.EKO_PF.init(E);   /* D103 */
-  { const l = E.landing(); E.state.pageId = l.pageId; E.state.module = l.module; }   /* D105: the role picks the landing */
+  if(window.EKO_PERSONA) window.EKO_PERSONA.init(E);
+  { const l = E.landing(); E.state.pageId = l.pageId; E.state.module = l.module; E.state.sub = l.sub || null; }   /* D105: the role picks the landing */
   try{ const u = new URL(location.href); if(u.searchParams.get('page') === 'portfolio' && (E.data.sites || []).length > 1 && u.searchParams.get('display') !== 'wall'){ E.state.pageId = 'portfolio'; E.state.module = 'overview'; } }catch(e){}   /* D108: the estate wall exits to the portfolio */
   E.state.disclose = loadDisclose();
   try{ const u = new URL(location.href); if(u.searchParams.get('display') === 'wall'){ E.state.wall = true; E.state.wallOpt = { scope: u.searchParams.get('scope') || null, distance: u.searchParams.get('distance'), dwell: u.searchParams.get('dwell'), brightness: u.searchParams.get('brightness'), motion: u.searchParams.get('motion'), shifts: u.searchParams.get('shifts'), scale: u.searchParams.get('scale'), panel: u.searchParams.get('panel'), panelIn: u.searchParams.get('panelIn'), theme: u.searchParams.get('theme'), lock: u.searchParams.get('lock'), id: u.searchParams.get('id') || 'default', viaTab: u.searchParams.get('via') === 'tab' }; if(window.EKO_WALL) window.EKO_WALL.start(E); } }catch(e){}   /* D106 */

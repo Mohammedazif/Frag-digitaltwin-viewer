@@ -242,7 +242,7 @@ window.EKO_C = (function(){
           <button class="ovcollapse tipU" data-act="ovpMin" data-tip="${esc(E.t(mn?'mpExpand':'mpCollapse'))}" aria-label="${esc(E.t(mn?'mpExpand':'mpCollapse'))}">
             ${icon(mn?'chevR2':'chevL2',16)}<span>${esc(E.t(mn?'mpExpand':'mpCollapse'))}</span></button>
         </div>
-        <div class="ovpad">${inner}</div>
+        <div class="ovpad">${window.EKO_PERSONA ? window.EKO_PERSONA.line(E) : ''}${inner}</div>
       </div></div>`;
   }
 
@@ -281,13 +281,17 @@ window.EKO_C = (function(){
         : (capText
             ? `<div class="ovkcap" data-tone="${r.capTone||'t3'}">${esc(capText)}</div>`
             : '');
+      const metric = (E.data.metrics || {})[r.metric];
+      const nc = metric == null && r.notConfigured;
       return `<div class="ovk" style="background:color-mix(in srgb, ${r.dom} 3%, transparent)">
         <div class="ovkhead"><span style="color:${r.dom}">${icon(r.icon,14,2)}</span>
           <span class="ovklbl">${esc(E.t(r.label))}</span>${ctl(E, E.t(r.label), E.lang==='ar' ? (r.capAr || r.deltaAr || '') : (r.capEn || r.deltaEn || ''))}</div>
-        <div class="ovkval"><span class="ovknum">${esc(sumVal(E, r))}</span>${sumVal(E, r) !== '--' ? `<span class="ovkunit">${esc(r.u)}</span>` : ''}</div>
+        ${nc
+          ? `<div class="ovkval"><span class="ovknc">${esc(E.t('sumNotConf'))}</span></div>`
+          : `<div class="ovkval"><span class="ovknum">${esc(sumVal(E, r))}</span>${sumVal(E, r) !== '--' ? `<span class="ovkunit">${esc(r.u)}</span>` : ''}</div>`}
         ${spark}</div>`;
     }).join('');
-    return summaryShell(E, E.t('execSummary'), `<div class="ovklist">${rows}</div>`);
+    return summaryShell(E, E.t('ov.siteSummary'), `<div class="ovklist">${rows}</div>`);
   }
 
   /* Energy landing summary (ENERGY SUMMARY): perf, current, MTD, overnight
@@ -327,6 +331,7 @@ window.EKO_C = (function(){
       + d.sumGauges.map(g2 => gaugeRow(ar?g2.labelAr:g2.labelEn, g2.val, g2.max, g2.u, ar?g2.wordAr:g2.wordEn, g2.tone)).join('')
       + (function () {
           const total = d.emsTotal == null ? 0 : d.emsTotal;
+          if (!total) return '';
           const active = d.emsActive == null ? 0 : d.emsActive;
           const tone = d.emsTone === 'warn' ? 'warn' : 'ok';
           const chip = ar ? d.emsChipAr : d.emsChipEn;
@@ -423,6 +428,15 @@ window.EKO_C = (function(){
       <div id="modcontent">${inner}</div></section>`;
   }
 
+  /* Fire and life safety: alarms and faults from the fire records, else the site's count. */
+  function fireCounts(E){
+    const ev = ((E.data.security || {}).fire || {}).events;
+    if(!Array.isArray(ev)) return null;
+    const on = ev.filter(x => x.active !== false), a = on.filter(x => x.kind !== 'fault').length, f = on.filter(x => x.kind === 'fault').length;
+    return { a, f, text: E.t(a === 1 ? 'fireCnt.a1' : 'fireCnt.an', { n: a }) + ', ' + E.t(f === 1 ? 'fireCnt.f1' : 'fireCnt.fn', { n: f }) };
+  }
+  const fireFoot = E => { const c = fireCounts(E); return c ? E.t('fireLS2', { c: c.text }) : E.t('fireLS', { n: E.data.lifeSafetyActive }); };
+
   /* Overview module panel: ALARMS card + ALARMS BY SYSTEM card. */
   function alarmModPanel(E){
     const alarms = E.data.alarms;              /* counts: always the full list */
@@ -480,7 +494,8 @@ window.EKO_C = (function(){
     const famsClear = E.data.families.filter(f => !famMap[f.id]);
     const sysRows = famsIn.map(f => {
       const v = famMap[f.id];
-      const parts = [v.fdd?`${v.fdd} ${E.t('legFdd')}`:null, v.sys?`${v.sys} ${E.t('legSystem')}`:null].filter(Boolean).join(' · ');
+      const fc = f.id === 'fire' ? fireCounts(E) : null;
+      const parts = fc ? fc.text : [v.fdd?`${v.fdd} ${E.t('legFdd')}`:null, v.sys?`${v.sys} ${E.t('legSystem')}`:null].filter(Boolean).join(' · ');
       return `<button class="sysrow" data-act="fltSysGo" data-v="${esc(f.id)}" data-tip="${esc(E.t('showSysTip',{sys:famL(f)}))}">
         <span class="sysdot"></span>
         <span class="sysname">${esc(famL(f))}</span><span class="cbadge" data-sev="${v.worst}" data-tip="${esc(E.t('sysBadgeTip',{n:v.n,sys:famL(f)}))}">${v.n}</span>
@@ -494,7 +509,7 @@ window.EKO_C = (function(){
         <div class="alcardh"><span class="alcardt">${esc(E.t('alarmsPanelT'))}</span>
           <span class="alcardm" data-tip="${esc(E.t('alarmsMetaTip'))}">${esc(E.t('alarmsMeta',{n:alarms.length,a:acked}))}</span></div>
         <div class="allist">${list}</div>
-        <div class="alfoot">${esc(E.t('fireLS',{n:E.data.lifeSafetyActive}))}</div>
+        <div class="alfoot">${esc(fireFoot(E))}</div>
       </div>
       <div class="alcard">
         <div class="alcardh"><span class="alcardt">${esc(E.t('alarmsBySys'))}</span>
@@ -628,7 +643,26 @@ window.EKO_C = (function(){
         : null;
       heroPrev = sumArr(p.zoneYesterday);
     }
-    const heroRow = `<div class="pwhero">
+    /* Sample sites with a month-to-date and a previous month (the medical engine) use that
+       page: MW peak and the two months. A live FIN site keeps today and yesterday in kWh. */
+    const simPower = !!(E.sim && el.mtdKwh != null && p.prevMonthKwh != null);
+    const limMw = p.contractedMw != null ? p.contractedMw : ((E.data.energyModel || {}).contractKw != null ? E.data.energyModel.contractKw / 1000 : null);
+    const peakMw = m.peakTodayMw != null ? m.peakTodayMw : (peakKw != null ? peakKw / 1000 : null);
+    const limDp = limMw != null && limMw < 1 ? 2 : 1;
+    const peakPctMw = (peakMw != null && limMw) ? Math.round(peakMw / limMw * 100) : null;
+    const heroDp = p.heroDp == null ? 0 : p.heroDp;
+    const monthChart = p.heroCharts && p.heroCharts.month && Array.isArray(p.heroCharts.month.spark) && p.heroCharts.month.spark.length ? p.heroCharts.month : null;
+    const simPeakChart = (simPower && p.heroCharts && p.heroCharts.peak && limMw && peakMw != null)
+      ? Object.assign({}, p.heroCharts.peak, { value: peakMw / limMw * 100, noteEn: E.t('pwContractedMwCap', { v: fmt(limMw, limDp) }), noteAr: E.t('pwContractedMwCap', { v: fmt(limMw, limDp) }) })
+      : null;
+    const carbonT = (simPower && el.mtdKwh != null && b.co2KgPerKwh != null) ? el.mtdKwh * b.co2KgPerKwh / 1000 : null;
+    const heroRow = simPower ? `<div class="pwhero">
+      ${hero(E.t('pwCurrentCons'), el.currentKw != null ? E.t('pwAboveChip') : '', el.currentKw != null ? 'warn' : '', nd(el.currentKw,1), el.currentKw != null ? 'kW' : '', E.t('pwBaselineKwCap',{v:fmt(el.baselineKw,1)}), el.currentKw != null && p.heroCharts && p.heroCharts.current ? bullet(p.heroCharts.current,'L') : '')}
+      ${hero(E.t('pwMtd'), E.t('pwLiveCap'), 'ok', nd(el.mtdKwh, heroDp), 'kWh', E.t('capMainMeters',{time:b.asOf||''})+' · '+E.t('pwFcstEod',{v:fmt(m.todayForecastEodMwh,1)}), monthChart ? spark(monthChart) : '')}
+      ${hero(E.t('pwPrevMonth'), '', '', nd(p.prevMonthKwh, heroDp), 'kWh', E.t('pwPrevMonthCap'))}
+      ${hero(E.t('pwCarbon'), '', '', nd(carbonT,2), carbonT != null ? 't' : '', carbonT != null ? E.t('pwCarbonMtd',{r:fmt(b.co2KgPerKwh,2)}) : '')}
+      ${hero(E.t('pwPeak'), peakPctMw != null ? E.t('pwPctLimit',{p:peakPctMw}) : '', peakPctMw != null ? 'crit' : '', nd(peakMw,2), peakMw != null ? 'MW' : '', limMw != null ? E.t('pwContractedMwCap',{v:fmt(limMw,limDp)}) : '', simPeakChart ? bullet(simPeakChart,'P') : '')}
+    </div>` : `<div class="pwhero">
       ${hero(E.t('pwCurrentCons'), el.currentKw != null ? E.t('pwAboveChip') : '', el.currentKw != null ? 'warn' : '', nd(el.currentKw,1), el.currentKw != null ? 'kW' : '', E.t('pwBaselineKwCap',{v:fmt(el.baselineKw,1)}), el.currentKw != null ? bullet(p.heroCharts.current,'L') : '')}
       ${hero(E.t('pwHeroNow.'+tr), '', '', nd(heroNow, 1), heroNow != null ? 'kWh' : '', E.t('pwHeroNowCap.'+tr))}
       ${hero(E.t('pwHeroPrev.'+tr), '', '', nd(heroPrev, 1), heroPrev != null ? 'kWh' : '', E.t('pwHeroPrevCap.'+tr))}
@@ -646,7 +680,10 @@ window.EKO_C = (function(){
       : tr === 'hourly' && zhAll.hourly && zhAll.hourly[0] && zhAll.hourly[0].length ? zhAll.hourly.map(lastVal)
       : (p.zoneLast24 && p.zoneLast24[0] && p.zoneLast24[0].length ? p.zoneLast24.map(lastVal)
         : p.boards.map(x => x[1] == null ? null : Number(x[1])));
-    const boards = boardNames.map((name,i2) => [name, boardLoads[i2] == null ? null : boardLoads[i2]]);
+    let boards = boardNames.map((name,i2) => [name, boardLoads[i2] == null ? null : boardLoads[i2]]);
+    /* Today's sample page reads the board snapshot in kW. Other ranges stay on the metered kWh series. */
+    const simKw = simPower && tr === 'today' && Array.isArray(p.boards) && p.boards.length && p.boards.every(x => Array.isArray(x));
+    if (simKw) boards = p.boards.map(x => [x[0], x[1] == null ? null : Number(x[1])]);
     const totKwh = boards.reduce((a,x)=>a+Math.max(0, Number(x[1])||0),0);
     const dbEmpty = boards.every(x => x[1] == null || Number(x[1]) === 0);
     const hues = p.zoneHues && p.zoneHues.length ? p.zoneHues : ['#4EA3E8','#F0A93B','#45C79A','#E48FC4','#A78BFA','#E06C75'];
@@ -665,9 +702,11 @@ window.EKO_C = (function(){
       cum += f;
       return s2;
     });
+    const shareCap = simKw ? E.t('pwDbShareMw', { mw: fmt(totKwh / 1000, 2) }) : E.t('pwDbShareCap', { when: dbWhen, v: dbTot });
+    const dbSub = simKw ? E.t('pwDbSubKw', { n: boards.length, v: fmt(totKwh, 0) }) : E.t('pwDbSub', { n: boards.length, v: dbTot, when: dbWhen });
     const share = `<article class="pwwidget">
       <div class="pwwh"><span class="alcardt">${esc(E.t('pwDbShare'))}</span>
-        <span class="alcardm">${esc(E.t('pwDbShareCap',{when:dbWhen,v:dbTot}))}</span>${window.EKO_A.chrome(E)}</div>
+        <span class="alcardm">${esc(shareCap)}</span>${window.EKO_A.chrome(E)}</div>
       <div class="dnwrap"><svg viewBox="0 0 160 160" aria-hidden="true">
         ${dsegs.map(s2=>`<circle cx="80" cy="80" r="58" fill="none" stroke="${s2.c}" stroke-width="30" stroke-dasharray="${s2.dash}" stroke-dashoffset="${s2.off}" transform="rotate(-90 80 80)"/>`).join('')}</svg>
         ${dbEmpty ? '' : dsegs.map(s2=>`<span class="dnlbl" style="left:${s2.lx}%;top:${s2.ly}%">${s2.pct}%</span>`).join('')}</div>
@@ -675,11 +714,11 @@ window.EKO_C = (function(){
     const totalMax = Math.max(0, ...boards.map(x=>Math.max(0, Number(x[1])||0)));
     const db = `<article class="pwwidget">
       <div class="pwwh"><span class="alcardt">${esc(E.t('pwDb'))}</span>
-        <span class="alcardm">${esc(E.t('pwDbSub',{n:boards.length,v:dbTot,when:dbWhen}))}</span>${window.EKO_A.chrome(E)}</div>
+        <span class="alcardm">${esc(dbSub)}</span>${window.EKO_A.chrome(E)}</div>
       <div class="dblist grow">${boards.map((x,i2) =>
         `<button class="dbrow" data-act="pwBoard" data-i="${i2}" data-on="${String(E.state.pwBoard)===String(i2)}"><span class="dbid">${esc(x[0])}</span>
           <span class="dbbar"><span style="width:${totalMax?((Math.max(0, Number(x[1])||0)/totalMax*100).toFixed(1)):0}%;background:${hues[i2]}"></span></span>
-          <span class="dbkw">${x[1]==null||(dbEmpty&&Number(x[1])===0)?'--':(fmt(Number(x[1]),1)+' kWh')}</span>${icon('chevR',12)}</button>`).join('')}</div></article>`;
+          <span class="dbkw">${x[1]==null||(dbEmpty&&Number(x[1])===0)?'--':(fmt(Number(x[1]), simKw ? 0 : 1)+(simKw ? ' kW' : ' kWh'))}</span>${icon('chevR',12)}</button>`).join('')}</div></article>`;
     /* no board mapped for this project: say so, never an empty donut or 0 kWh rows */
     const noBoards = titleKey => `<article class="pwwidget"><div class="pwwh"><span class="alcardt">${esc(E.t(titleKey))}</span></div><p class="alempty" data-testid="pw-boards-unset">${esc(E.t('pwDbNotConfigured'))}</p></article>`;
     let zh = (zhAll[tr] && zhAll[tr][0]) ? zhAll[tr] : [[]];
@@ -736,7 +775,8 @@ window.EKO_C = (function(){
       : tr==='monthly' ? E.t('pwEnSubMonthly',{from:xLabels[0]||'',to:xLabels[xLabels.length-1]||''})
       : E.t('pwEnSub',{t:todayTo});
     const enCap = boardIdx >= 0 && zhNames[0] ? zhNames[0] + ' · ' + enCap0 : enCap0;
-    const pkCap = tr==='hourly' ? E.t('pwPeakSubHourly')
+    const pkCap = (simPower && tr === 'today') ? E.t('pwPeakSub15')
+      : tr==='hourly' ? E.t('pwPeakSubHourly')
       : tr==='weekly' ? E.t('pwPeakSubWeekly',{range:weekRange})
       : tr==='monthly' ? E.t('pwPeakSubMonthly',{from:xLabels[0]||'',to:xLabels[xLabels.length-1]||''})
       : E.t('pwPeakSub',{t:todayTo});
@@ -751,11 +791,13 @@ window.EKO_C = (function(){
           ${xAxis(hours)}</div></div>
       <div class="pwlegend">${zhNames.map((z,i2)=>`<span><i class="zdot" style="background:${zhHues[i2]}"></i>${esc(z)}</span>`).join('')}</div></article>`;
     const psAll = { hourly: p.peakLast24, today: p.peakSeries, weekly: p.peakWeekly, monthly: p.peakMonthly };
-    const ps = (psAll[tr] && psAll[tr].length) ? psAll[tr] : [];
+    const simPeakMw = simPower && tr === 'today' && Array.isArray(p.peakSeriesMw) && p.peakSeriesMw.length;
+    const ps = simPeakMw ? p.peakSeriesMw : ((psAll[tr] && psAll[tr].length) ? psAll[tr] : []);
+    const pkUnit = simPeakMw ? 'MW' : 'kW';
     const n3 = ps.length;
     const peakAvg = n3 ? ps.reduce((a2,v)=>a2+(Number(v)||0),0)/n3 : 0;
     const livePeak = n3 ? Math.max(...ps.map(v=>Number(v)||0)) : 0;
-    const contract = m.contractedKw;
+    const contract = simPeakMw ? limMw : m.contractedKw;
     const niceMax = v => {
       if(!(v > 0)) return 1;
       const mag = Math.pow(10, Math.floor(Math.log10(v)));
@@ -773,7 +815,7 @@ window.EKO_C = (function(){
     for(let i2=0;i2<n3;i2++){
       const label = xLabels[i2] || '';
       const val = nv(Number(ps[i2])||0);
-      pkHits += hitCell(label, 'kW', [{ c: '#4EA3E8', n: E.t('pwPeak'), v: val }]);
+      pkHits += hitCell(label, pkUnit, [{ c: '#4EA3E8', n: E.t('pwPeak'), v: val }]);
     }
     const pTicks = [PMAX, PMAX*0.75, PMAX*0.5, PMAX*0.25, 0].map(v => v >= 10 ? Math.round(v) : (Math.round(v*10)/10));
     const peak = `<article class="pwwidget">
@@ -793,8 +835,8 @@ window.EKO_C = (function(){
             ${n3===1 ? `<circle cx="${xAt(0).toFixed(2)}" cy="${pty(ps[0]).toFixed(2)}" r="1.8" fill="#4EA3E8"/>` : ''}
             </svg>
           ${n3 ? `<div class="chhits39">${pkHits}</div>` : ''}
-          ${contract != null ? `<span class="pkband39">${esc(E.t('pwContractedLine',{v:fmt(contract,1)}))}</span>` : ''}
-          ${n3 ? `<span class="pkavg39" style="top:${yA.toFixed(1)}%">${esc(E.t('pwAvgLine',{v:fmt(peakAvg,1)}))}</span>` : ''}
+          ${contract != null ? `<span class="pkband39">${esc(simPeakMw ? E.t('pwContractedMwCap',{v:fmt(contract,limDp)}) : E.t('pwContractedLine',{v:fmt(contract,1)}))}</span>` : ''}
+          ${n3 ? `<span class="pkavg39" style="top:${yA.toFixed(1)}%">${esc(simPeakMw ? E.t('pwAvgLineMw',{v:fmt(peakAvg,2)}) : E.t('pwAvgLine',{v:fmt(peakAvg,1)}))}</span>` : ''}
         </div>
         ${xAxis(Math.max(n3, hours))}</div></div>
       <span class="ovkcap">${esc(E.t('pwPenalty'))}</span></article>`;
