@@ -1238,7 +1238,7 @@ window.EKO_C = (function(){
       <div class="aphends"><span>${esc(dateOf(hist[0], { day: 'numeric', month: 'short' }))}</span><span>${esc(dateOf(hist[n - 1], { day: 'numeric', month: 'short' }))}</span></div>`;
   }
 
-  /* E15: the drawer for the hospital's engine assets, copied from the pack (assetPanel15 is its assetPanel) */
+  /* E15: the drawer for the medical demo site's engine assets, copied from the pack (engineAssetPanel is its assetPanel) */
   /* Work-order action as a HEADER ICON (D136 footprint, D47 behaviour): ONE
      28px slot, three states — idle (create), raising (spinner, no longer a
      button), raised (a check that opens the Activity tab). The work-order
@@ -1444,7 +1444,7 @@ window.EKO_C = (function(){
       <div class="ap15tr">${PV.projChart(p, 150, 56)}</div>
       ${wo ? `<button class="btnG btnSm ap15act" data-act="woOpen" data-asset="${esc(id)}">${esc(t('br14c.openWo', { wo: wo.id }))}</button>` : ''}</section>`;
   }
-  function assetPanel15(E){
+  function engineAssetPanel(E){
     const id = E.state.assetSel;
     if(!id) return '';
     const r = E.data.assets.find(a => a.id === id) || (window.EKO_MT && window.EKO_MT.meterAsAsset(E, id));   /* D96: a meter row opens here too */
@@ -1596,7 +1596,7 @@ window.EKO_C = (function(){
   function assetPanel(E){
     const id = E.state.assetSel;
     if(!id) return '';
-    if(E.sim) return assetPanel15(E);   /* E15: the hospital's engine data */
+    if(E.sim) return engineAssetPanel(E);   /* E15: the medical demo site's engine data */
     const r = E.data.assets.find(a => a.id === id) || (window.EKO_MT && window.EKO_MT.meterAsAsset(E, id))   /* D96: a meter row opens here too */
       || alarmAsAsset(E, id);   /* an alarm's equipment the register does not list yet */
     if(!r) return '';

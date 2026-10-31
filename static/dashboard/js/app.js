@@ -18,7 +18,8 @@
   /* E15: a project on another demo site (Project settings > Demo site) runs on that site's data, with the Studio viewer */
   (function pickSite(){
     const want = (window.INJECTED_PROJECT_CONFIG || {}).dataSite, D = window.EKO_DATA || {};
-    (window.DASHBOARD_ROOT || document.documentElement).toggleAttribute('data-e15', !!(want && D[want]));   // css/e15.css applies only here
+    const root = window.DASHBOARD_ROOT || document.documentElement;   // css/medical-demo.css applies only under data-demo-site
+    if(want && D[want]) root.setAttribute('data-demo-site', want); else root.removeAttribute('data-demo-site');
     if(!want || !D[want] || !D.marsa || D[want] === D.marsa) return;
     const site = D[want], row = (D.portfolio || []).find(p => p.key === 'marsa');
     site.viewer = D.marsa.viewer;
