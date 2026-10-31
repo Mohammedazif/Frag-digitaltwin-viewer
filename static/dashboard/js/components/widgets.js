@@ -517,7 +517,7 @@ window.EKO_C = (function(){
        followed by the Energy Waste & Risk section (totals + share bars).
        Top opportunities and Modules do NOT live on this panel. */
     const cur = b.currency || 'AED';   /* the project's currency; no unit after a missing cost */
-    const money = !(window.EKO_MODULES === 'extended' && window.EKO_PERSONA) || window.EKO_PERSONA.money(E);   /* E16: with the extended modules, AED only for a money role */
+    const money = !window.EKO_PERSONA || window.EKO_PERSONA.money(E);   /* E16: AED only for a money role (the executive, the managers, the facility manager) */
     const cards = d.kpis.map(k => {
       const st = ar ? k.stateAr : k.stateEn;
       const cost = k.costAed != null ? k.costAed : (k.wasteKwh != null && b.aedPerKwh != null ? k.wasteKwh * b.aedPerKwh : null);   /* no tariff: unknown, not 0 */
@@ -1602,16 +1602,13 @@ window.EKO_C = (function(){
     if(!r) return '';
     const t = E.t.bind(E), arL = E.lang === 'ar';
     const als = (r.alarms||[]).map(x=>E.alarm(x)).filter(Boolean);   /* a refresh can retire an alarm id the row still lists */
-    const sevN = { critical:0, high:0, medium:0 };
-    als.forEach(a => { if (sevN[a.sev] != null) sevN[a.sev]++; });
     const worst = ['critical','high','medium'].map(s => als.find(a => a.sev === s)).find(Boolean) || als[0];
-    const sevChips = ['critical','high','medium'].filter(s => sevN[s]).map(s => `<span class="statchip" data-sev="${s}">${sevN[s]} ${esc(t('rib'+s[0].toUpperCase()+s.slice(1)))}</span>`).join('');
     /* The floor and the type; whichever is missing leaves no stray separator */
     const ctx = [arL ? (r.levelAr || r.level) : r.level, arL ? (r.typeAr || r.typeEn) : r.typeEn].filter(Boolean).join(' \u00b7 ');
     const ctl = window.EKO_CTL && window.EKO_CTL.showsControl(E, r);
     let tab = E.state.apTab;
-    if (tab === 'activity') tab = 'analytics';
-    if(!['alarms','analytics','om','warranty','workorder','control'].includes(tab)) tab = 'alarms';
+    if (tab === 'workorder') tab = 'activity';   /* E15: the FIN work orders are the Activity tab */
+    if(!['alarms','activity','analytics','om','warranty','control'].includes(tab)) tab = 'alarms';
     if(tab === 'control' && !ctl) tab = 'alarms';
     const trP = x => E.ph(x);
     const foldNav = n => String(n || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -1654,13 +1651,8 @@ window.EKO_C = (function(){
     const pack = docsFor(E, r);
     const omDocs = pack ? (pack.om ? [pack.om] : []) : (r.omDocs || []);
     const warranty = pack ? (pack.warranty || null) : (r.warranty || null);
-    const docRow = d2 => {
-      const title = esc(arL ? (d2.tAr || d2.tEn) : d2.tEn);
-      const name = d2.url
-        ? `<button type="button" class="aplink" data-act="docOpen" data-url="${esc(d2.url)}" data-title="${title}">${title}</button>`
-        : title;
-      return `<div class="aprow"><dt>${name}</dt><dd class="cT3">${esc(d2.meta || '')}</dd></div>`;
-    };
+    const docBox = d2 => { const title = arL ? (d2.tAr || d2.tEn) : d2.tEn;
+      return pbox({ kind: t('ap.doc'), title, detail: d2.meta || '', act: d2.url ? 'docOpen' : null, data: d2.url ? { url: d2.url, title } : null }); };
     const wtyPick = which => {
       if (which === 'start' && r.wtyStart) return r.wtyStart;
       if (which === 'end' && r.wtyEnd) return r.wtyEnd;
@@ -1709,9 +1701,6 @@ window.EKO_C = (function(){
       else if (left === 0) wtyLeftTxt = t('apWtyToday');
       else wtyLeftTxt = t('apWtyExpired');
     }
-    const wtyDates = (wtyStartVal ? `<div class="aprow"><dt>${esc(t('apWtyStart'))}</dt><dd>${esc(wtyStartVal)}</dd></div>` : '')
-      + (wtyEndVal ? `<div class="aprow"><dt>${esc(t('apWtyEnd'))}</dt><dd>${esc(wtyEndVal)}</dd></div>` : '')
-      + (wtyLeftTxt ? `<div class="aprow"><dt>${esc(t('apWtyRemain'))}</dt><dd>${esc(wtyLeftTxt)}</dd></div>` : '');
     /* Alarm history: one toggle per alarm, keyed by the alarm's id (never its position); its events come with the alarm */
     const histOpen = a => !!(E.state.alHistOpen && E.state.alHistOpen[a.id]);
     const histBtn = a => {
@@ -1728,88 +1717,65 @@ window.EKO_C = (function(){
         : `<ul class="alhl">${list.map(h => `<li class="alhe"><div class="alhh"><span class="alhw tMonoS">${esc(histWhen(h.at))}</span><span class="statchip" data-sev="${h.sev}">${esc(t('rib'+h.sev[0].toUpperCase()+h.sev.slice(1)).toLowerCase())}</span><span class="alhs">${esc(t(h.open ? 'alHistOpen' : 'alHistCleared'))}</span></div><div class="alhm">${esc(h.msg)}</div>${h.tech ? `<div class="alreftech">${esc(h.tech)}</div>` : ''}</li>`).join('')}</ul>`;
       return `<div class="alhist" id="alh-${esc(a.id)}" role="region" aria-label="${esc(t('alHistTitle'))}">${inner}${list ? `<div class="alhnote">${esc(t('alHistScope'))}</div>` : ''}</div>`;
     };
+    /* E15: the D182 drawer for every asset (Alarms, Activity, Analytics, O&M, Warranty, Control), with the FIN content in its blocks */
+    const row = (name, valX) => `<div class="aprow"><dt><span class="aprown">${esc(name)}</span></dt><dd>${valX}</dd></div>`;
+    const rows = html => html ? `<dl class="aprows">${html}</dl>` : '';
+    const sec = label => `<h3 class="apsec">${esc(label)}</h3>`;
+    const empty = key => `<p class="apempty">${esc(t(key))}</p>`;
+    const recOf = a => a.recEn ? `<div class="alrec"><span class="alrecl">${esc(t('apRecommended'))}</span><div class="alrect">${esc(E.lang === 'ar' ? (a.recAr || a.recEn) : a.recEn)}</div>${a.basisEn ? `<div class="alrecb"><span class="alrecl">${esc(t('apRecBasis'))}</span> ${esc(E.lang === 'ar' ? (a.basisAr || a.basisEn) : a.basisEn)}</div>` : ''}</div>` : '';
     let body = '';
     if(tab === 'alarms'){
-      const fddHtml = fddRows.length
-        ? fddRows.map(p => `<div class="aprow"><dt>${esc(trP(p[0]))}</dt><dd>${esc(E.clip2 ? E.clip2(p[2]) : p[2])}</dd></div>`).join('')
-        : '';
-      const alarmPtHtml = alarmPtRows.length
-        ? alarmPtRows.map(p => `<div class="aprow"><dt>${esc(trP(p[0]))}</dt><dd>${esc(p[1])}</dd></div>`).join('')
-        : '';
-      body = (fddHtml ? `<h4 class="tLbl">${esc(t('apFdd'))}</h4>${fddHtml}` : '')
-        + alarmPtHtml
-        + (als.length ? als.map(a => `<div class="alref">
-        <div class="alrefh"><span class="statchip" data-sev="${a.sev}">${esc(t('rib'+a.sev[0].toUpperCase()+a.sev.slice(1)).toLowerCase())}</span>
-          <span class="alrefage tMonoS msA">${esc(a.age)}</span>${histBtn(a)}</div>
-        <div class="alreft">${esc(E.alarmLines(a).main)}</div>${E.alarmLines(a).sub ? `<div class="alreftech">${esc(E.alarmLines(a).sub)}</div>` : ''}
-        ${a.recEn ? `<div class="alrec"><span class="alrecl">${esc(t('apRecommended'))}</span><div class="alrect">${esc(E.lang === 'ar' ? (a.recAr || a.recEn) : a.recEn)}</div>${a.basisEn ? `<div class="alrecb"><span class="alrecl">${esc(t('apRecBasis'))}</span> ${esc(E.lang === 'ar' ? (a.basisAr || a.basisEn) : a.basisEn)}</div>` : ''}</div>` : ''}
-        ${a.ack ? `<div class="alrefack">${esc(t('ackShort',{time:a.ack.time,who:a.ack.who}))}</div>` : ''}
-        ${histPanel(a)}
-      </div>`).join('') : `<p class="alempty">${esc(t('apNoAlarms'))}</p>`);
-    } else if(tab === 'analytics'){
-      body = `<h4 class="tLbl">${esc(t('apLiveParams'))}</h4>`
-        + (typeRows || analogRows || `<p class="alempty">${esc(t('apNoLive'))}</p>`)
-        + `<h4 class="tLbl seclbl">${esc(t('apFullT'))}</h4>${graphBlock}`;
-    } else if(tab === 'om'){
-      body = `<h4 class="tLbl seclbl">${esc(t('omLib'))}</h4>`
-        + (omDocs.length ? omDocs.map(docRow).join('')
-          : `<p class="alempty">${esc(t('omEmpty'))}</p>`)
-        + `<h4 class="tLbl seclbl">${esc(t('apRefs'))}</h4>
-        <div class="aprow"><dt>${esc(t('apMake'))}</dt><dd>${esc(r.make||t('emptyDash'))}</dd></div>
-        <div class="aprow"><dt>${esc(t('apSerial'))}</dt><dd>${esc(r.serial||t('emptyDash'))}</dd></div>
-        <div class="aprow"><dt>${esc(t('apSvc'))}</dt><dd>${esc(r.svc||t('emptyDash'))}</dd></div>
-        <div class="aprow"><dt>${esc(t('apCafmRec'))}</dt><dd class="row gap6">
-          <span class="tMonoS">${esc(r.cafm||t('emptyDash'))}</span>
-          ${r.cafm?`<button class="aplink" data-act="none">${esc(t('openW'))}</button>`:''}</dd></div>
-        <p class="apnote">${esc(t('omIndexed'))}</p>`;
-    } else if(tab === 'workorder'){
+      const boxes = als.map(a => { const L = E.alarmLines(a);   /* the technical line stays visible, as before */
+        return `<div class="apalarm">${pbox({ kind: t('ap.alarmKind.' + a.sev), time: a.ageH != null ? E.fmtAge(a.ageH) : (a.age || ''),
+          title: (arL ? (a.plainAr || a.plainEn) : a.plainEn) || L.main,
+          detail: a.ack ? t('ackShort', { time: a.ack.time, who: E.person(a.ack.who) }) : t('apUnack'),
+          value: L.sub ? [t('ap.reading'), L.sub] : null, sev: a.sev, acked: !!a.ack, hend: histBtn(a),
+          actions: a.ack ? [] : [{ act: 'ackAlarm', data: { alarm: a.id }, label: t('acknowledge') }] })}${recOf(a)}${histPanel(a)}</div>`; }).join('');
+      const fdd = fddRows.map(p => row(trP(p[0]), esc(E.clip2 ? E.clip2(p[2]) : p[2]))).join('');
+      const pts = alarmPtRows.map(p => row(trP(p[0]), esc(p[1]))).join('');
+      body = (als.length ? `<div class="pboxes">${boxes}</div>` : empty('ap.noAlarms'))
+        + (fdd ? sec(t('apFdd')) + rows(fdd) : '') + (pts ? sec(t('ap.readings')) + rows(pts) : '');
+    } else if(tab === 'activity'){
       body = workOrderBody(E, r);
+    } else if(tab === 'analytics'){
+      body = `<section class="pcard"><h3 class="pcardt">${esc(t('apFullT'))}</h3>${graphBlock}</section>`
+        + sec(t('apLiveParams')) + ((typeRows || analogRows) ? rows(typeRows || analogRows) : empty('apNoLive'));
+    } else if(tab === 'om'){
+      body = rows(row(t('apMake'), esc(r.make || t('emptyDash'))) + row(t('apSerial'), esc(r.serial || t('emptyDash'))) + row(t('apSvc'), esc(r.svc || t('emptyDash')))
+          + row(t('apCafmRec'), r.cafm ? `<button class="aplink" aria-disabled="true" data-tip="${esc(t('apCafmOpen'))}">${esc(r.cafm)}</button>` : esc(t('emptyDash'))))
+        + sec(t('ap.docs')) + (omDocs.length ? `<div class="pboxes">${omDocs.map(docBox).join('')}</div>` : empty('omEmpty'));
     } else if(tab === 'warranty'){
-      if (warranty) {
-        const title = esc(arL ? (warranty.tAr || warranty.tEn) : warranty.tEn);
-        const name = warranty.url
-          ? `<button type="button" class="aplink" data-act="docOpen" data-url="${esc(warranty.url)}" data-title="${title}">${title}</button>`
-          : title;
-        const bits = [`<span>${esc(warranty.meta || 'PDF')}</span>`];
-        if (wtyStartVal) bits.push(`<span>${esc(t('apWtyStart'))} ${esc(wtyStartVal)}</span>`);
-        if (wtyEndVal) bits.push(`<span>${esc(t('apWtyEnd'))} ${esc(wtyEndVal)}</span>`);
-        if (wtyLeftTxt) bits.push(`<span>${esc(wtyLeftTxt)}</span>`);
-        body = `<div class="aprow apwtyrow"><dt>${name}</dt><dd class="cT3"><span class="apwtypair">${bits.join('')}</span></dd></div>`;
-      } else {
-        body = wtyDates || `<p class="alempty">${esc(t('wtyEmpty'))}</p>`;
-      }
+      const dates = (wtyStartVal ? row(t('apWtyStart'), esc(wtyStartVal)) : '') + (wtyEndVal ? row(t('apWtyEnd'), esc(wtyEndVal)) : '') + (wtyLeftTxt ? row(t('apWtyRemain'), esc(wtyLeftTxt)) : '');
+      body = rows(dates) + (warranty ? `<div class="pboxes">${docBox(warranty)}</div>` : '') + (!dates && !warranty ? empty('wtyEmpty') : '');
     } else if(tab === 'control'){
       body = window.EKO_CTL.controlTab(E, r);
     }
-    const woDone = E.state.woRaised[id];
     const orders = r.workOrders || [];
     const woOver = orders.some(o => o.status === 'over');
-    const tabBtn = (k, lbl, n, sev) => `<button class="aptab" data-on="${tab===k}" data-act="apTab" data-v="${k}">${esc(lbl)}${n?`<span class="cbadge" data-sev="${sev || (worst?worst.sev:'medium')}">${n}</span>`:''}</button>`;
-    return `<aside id="assetpanel" data-born="${E.state.born==='asset'?1:0}" data-wide="${E.state.apWide?1:0}" role="dialog" aria-label="${esc(id)}">
+    const badge = `<span class="cbadge" data-sev="${worst ? worst.sev : 'none'}">${als.length}</span>`;
+    const woBadge = orders.length ? `<span class="cbadge" data-sev="${woOver ? 'high' : 'none'}">${orders.length}</span>` : '';
+    const tabBtn = (k, lbl, extra) => `<button class="aptab" data-on="${tab===k}" data-act="apTab" data-v="${k}">${esc(lbl)}${extra||''}</button>`;
+    return `<aside id="assetpanel" data-born="${E.state.born==='asset'?1:0}" data-wide="${E.state.apWide?1:0}" data-tab="${tab}" role="dialog" aria-label="${esc(id)}">
       <div class="draghandle"></div>
       ${E.state.locFocus && !E.stacked() ? `<div class="apback"><button class="btnG btnSm" data-act="locBack">${icon('chevL',14)} ${esc(t('backToAssets'))}</button></div>` : ''}
       <div class="aphead">
-        <span class="tMono grow fw6">${esc(id)}</span>
-        ${sevChips ? `<span class="regsevs">${sevChips}</span>` : ''}
+        <span class="tMono grow fw6" data-tip="${esc(id)}" data-tipif="trunc">${esc(id)}</span>
+        <span class="apacts" role="group" aria-label="${esc(t('apActions'))}">
+          ${apAct('locate', id, 'box', t('locate3d'))}${woIcon(E, id)}${apAct('none', id, 'external', t('apCafmOpen'))}</span>
         ${eqLabelsEye(E, r)}
         <button class="iconbtn icon26 aibtn tipU" data-act="aiOpen" data-ai-label="${esc(id)}" data-ai-topic="alarms" data-ai-cap="${esc(arL?(r.levelAr||r.level):r.level)}" data-tip="${esc(t('ai.about'))}" aria-label="${esc(t('ai.about'))}">${icon('spark',16)}</button>
         <button class="iconbtn icon26" data-act="apWide" data-on="${E.state.apWide?1:0}" aria-pressed="${E.state.apWide?'true':'false'}" aria-label="${esc(t('mpExpand'))}">${icon('maximize',14)}</button>
         <button class="iconbtn icon26" data-act="closeAsset" aria-label="${esc(t('close'))}">${icon('x',12)}</button>
       </div>
       <div class="apctx" data-tip="${esc(ctx)}" data-tipif="trunc">${esc(ctx)}</div>
-      <div class="appills">
-        <button class="btnP btnSm" data-act="locate" data-asset="${esc(id)}">${esc(t('locate3d'))}</button>
-        ${woBtn(E, id)}
-        <button class="btnG btnSm" data-act="none">⧉ ${esc(t('apCafm'))}</button>
-      </div>
-      <div class="aptabs">${tabBtn('alarms', t('apAlarms'), als.length||'')}${tabBtn('analytics', t('apAnalytics'))}${tabBtn('om', t('apOmTab'))}${tabBtn('warranty', t('apWtyTab'))}${tabBtn('workorder', t('apWoTab'), orders.length||'', woOver?'high':'medium')}${ctl?tabBtn('control', t('apControlTab')):''}</div>
+      <div class="aptabs">${tabBtn('alarms', t('apAlarms'), badge)}${tabBtn('activity', t('apActivityTab'), woBadge)}${tabBtn('analytics', t('apFullT'))}${tabBtn('om', t('apOmTab'))}${tabBtn('warranty', t('apWtyTab'))}${ctl?tabBtn('control', t('apControlTab')):''}</div>
       <div class="apbody">${body}</div>
       <div class="apfoot apfootmob">
         ${E.state.woRaised[id] || (E.state.woPhase||{})[id]
           ? `${woBtn(E, id)}<button class="btnG" data-act="locate" data-asset="${esc(id)}">${esc(t('locate3d'))}</button>`
           : `<button class="btnP" data-act="cwo" data-asset="${esc(id)}">${esc(t('cwo'))}</button>
              <button class="btnG" data-act="locate" data-asset="${esc(id)}">${esc(t('locate3d'))}</button>`}
-        <button class="btnG apcafm" data-act="none" data-tip="${esc(t('apCafm'))}" aria-label="${esc(t('apCafm'))}">⧉</button>
+        <button class="btnG apcafm" aria-disabled="true" data-tip="${esc(t('apCafmOpen'))}" aria-label="${esc(t('apCafmOpen'))}">${dicon('external',15)}</button>
       </div></aside>`;
   }
 
