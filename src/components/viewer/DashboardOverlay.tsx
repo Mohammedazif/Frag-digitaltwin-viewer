@@ -143,7 +143,7 @@ export function DashboardOverlay({ visible, engineRef, engineReady = false }: Da
       if (mapped) return mapped
       const assets: any[] = (window as any).EKO?.data?.assets || []
       const asset = assets.find(a => a.id === assetId || normAssetId(a.id || '') === norm)
-      // The hospital demo data names its element (gid) or room (roomGid) instead of bimId
+      // Simulation engine assets name their element (gid) or room (roomGid) instead of bimId
       return [asset?.bimId, asset?.gid, asset?.roomGid].find(isGuid) || null
     }
 

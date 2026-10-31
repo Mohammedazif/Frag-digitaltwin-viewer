@@ -517,7 +517,7 @@ window.EKO_C = (function(){
        followed by the Energy Waste & Risk section (totals + share bars).
        Top opportunities and Modules do NOT live on this panel. */
     const cur = b.currency || 'AED';   /* the project's currency; no unit after a missing cost */
-    const money = !(E.sim && window.EKO_PERSONA) || window.EKO_PERSONA.money(E);   /* E16: on the hospital, AED only for a money role */
+    const money = !(window.EKO_MODULES === 'extended' && window.EKO_PERSONA) || window.EKO_PERSONA.money(E);   /* E16: with the extended modules, AED only for a money role */
     const cards = d.kpis.map(k => {
       const st = ar ? k.stateAr : k.stateEn;
       const cost = k.costAed != null ? k.costAed : (k.wasteKwh != null && b.aedPerKwh != null ? k.wasteKwh * b.aedPerKwh : null);   /* no tariff: unknown, not 0 */
@@ -1238,7 +1238,7 @@ window.EKO_C = (function(){
       <div class="aphends"><span>${esc(dateOf(hist[0], { day: 'numeric', month: 'short' }))}</span><span>${esc(dateOf(hist[n - 1], { day: 'numeric', month: 'short' }))}</span></div>`;
   }
 
-  /* E15: the drawer for the medical demo site's engine assets, copied from the pack (engineAssetPanel is its assetPanel) */
+  /* E15: the drawer for the simulation engine's assets, copied from the pack (engineAssetPanel is its assetPanel) */
   /* Work-order action as a HEADER ICON (D136 footprint, D47 behaviour): ONE
      28px slot, three states — idle (create), raising (spinner, no longer a
      button), raised (a check that opens the Activity tab). The work-order
@@ -1596,7 +1596,7 @@ window.EKO_C = (function(){
   function assetPanel(E){
     const id = E.state.assetSel;
     if(!id) return '';
-    if(E.sim) return engineAssetPanel(E);   /* E15: the medical demo site's engine data */
+    if(E.sim) return engineAssetPanel(E);   /* E15: a site run by the simulation engine */
     const r = E.data.assets.find(a => a.id === id) || (window.EKO_MT && window.EKO_MT.meterAsAsset(E, id))   /* D96: a meter row opens here too */
       || alarmAsAsset(E, id);   /* an alarm's equipment the register does not list yet */
     if(!r) return '';

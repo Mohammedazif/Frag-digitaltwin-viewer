@@ -247,7 +247,7 @@ window.EKO_A = (function(){
 
   /* ------------------------------ BENCHMARK -------------------------------- */
   function benchPage(E){
-    if(window.EKO_EP && window.EKO_OPS && window.EKO_EP.applies(E)) return window.EKO_EP.benchPage(E);   /* E15: the hospital's daily energy model (js/energy-pages.js) */
+    if(window.EKO_EP && window.EKO_OPS && window.EKO_EP.applies(E)) return window.EKO_EP.benchPage(E);   /* E15: a site with a daily energy model (js/energy-pages.js) */
     const d = E.data.bench, ar = E.lang === 'ar';
     const heroes = [
       heroTile(E, E.t('benchIntensity'), fmt(d.siteWhm2, 1), 'Wh/m²', E.t('benchIntensityCap',{t:E.data.basis.asOf})),
