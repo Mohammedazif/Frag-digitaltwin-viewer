@@ -178,6 +178,12 @@
     person(x, head){ const s = this.ph(x); if(!head || this.lang === 'ar' || typeof s !== 'string' || !s.startsWith('the ')) return s;
       return head === 'bare' ? s.charAt(4).toUpperCase() + s.slice(5) : 'T' + s.slice(1); },
     overviewId(){ return this.data.overviewPage || 'marsa-overview'; },
+    /* E15: a permission from the user record, else the role's defaults (data.permissionDefaults) */
+    can(p){ const u = this.data.user || {}; if(typeof u[p] === 'boolean') return u[p]; return ((this.data.permissionDefaults || {})[p] || []).includes(this.role()); },
+    /* E15: THE limit: the contract, else the design capacity; lk picks the design wording of a key when there is one */
+    limit(){ const p = this.data.power || {}; if(p.contractedMw != null) return { mw: p.contractedMw, kind: 'contract' };
+      const d = p.designMw != null ? p.designMw : (this.data.dc || {}).designMw; return d != null ? { mw: d, kind: 'design' } : null; },
+    lk(key){ const l = this.limit(); return l && l.kind === 'design' && window.EKO_I18N.en[key + '.design'] !== undefined ? key + '.design' : key; },
     /* E15: "now" to the minute, and a stored instant as "HH:MM" today, "Tue 14:00" this week, "13 Sep 14:00" beyond */
     nowMs(){ return Math.floor(Date.now() / 60000) * 60000; },
     clockLabel(ms){
@@ -454,6 +460,7 @@
       ${(() => { const dark = (window.DASHBOARD_ROOT||document.documentElement).getAttribute('data-theme') !== 'light';   /* D129: one-click light/dark; Auto lives in Settings › Appearance */
         return `<button class="iconbtn tipU themebtn" data-act="themeToggle" data-tip="${esc(E.t(dark ? 'themeToLight' : 'themeToDark'))}" aria-label="${esc(E.t(dark ? 'themeToLight' : 'themeToDark'))}">${icon(dark ? 'sun' : 'moon', 18)}</button>`; })()}
       <button class="iconbtn tipU tbdisp" data-act="dlg" data-v="display" data-tip="${esc(E.t('tbDisplay'))}" aria-label="${esc(E.t('tbDisplay'))}" aria-haspopup="menu" aria-expanded="${E.state.dlg==='display'}">${icon('monitor',18)}</button>
+      ${window.EKO_BRIEF ? window.EKO_BRIEF.control(E) : ''}
       <button class="iconbtn deskonly tipU" data-act="dlg" data-v="report" data-tip="${esc(E.t('reportsTip'))}" aria-label="${esc(E.t('reportsTip'))}" aria-haspopup="dialog">${icon('doc',18)}</button>
       ${window.EKO_NF ? window.EKO_NF.bell(E) : ''}
       <button class="avatar tipU" data-act="dlg" data-v="menu" data-tip="${esc(E.t('accountTip'))}" aria-haspopup="menu" aria-label="${esc(E.t('accountTip'))}">${esc(E.initials() || '·')}</button>
@@ -542,6 +549,7 @@
           <button class="nvi" data-act="dlg" data-v="help" aria-haspopup="dialog"><span class="nvic">${icon('help',17)}</span><span class="nlbl">${esc(E.t('hpTitle'))}</span></button></div></div>`;
     }
     if(E.state.signedOut) return `<div class="signedout" role="dialog" aria-modal="true" aria-label="${esc(E.t('signedOutT'))}"><div class="signedoutcard">${C.brandLogo(E)}<h2>${esc(E.t('signedOutT'))}</h2><p class="tCap">${esc(E.t('signedOutD'))}</p><button class="btnP" data-act="signIn">${esc(E.t('signIn'))}</button></div></div>`;   /* D129 */
+    if(window.EKO_BRIEF) out += window.EKO_BRIEF.overlay(E);   /* E15: the Brief floats over the page, a transient surface */
     if(window.EKO_AI) out += window.EKO_AI.launcher(E) + window.EKO_AI.panel(E);   /* D132/D133: the launcher, the scrim and the conversation, with or without a dialog */
     if(!d) return out + (window.EKO_POINT_CONTROL ? window.EKO_POINT_CONTROL.overlay(E) : '') + (window.EKO_CTL ? window.EKO_CTL.overlays(E) : '') + (window.EKO_NF ? window.EKO_NF.overlays(E) : '') + (window.EKO_PWA ? window.EKO_PWA.overlays(E) : '');
     if(d === 'display'){
@@ -951,6 +959,7 @@
     }
     E.state.born = null;
     if(window.EKO_SURF) window.EKO_SURF.afterRender();          /* R5 (D67) */
+    if(window.EKO_BRIEF) window.EKO_BRIEF.after();               /* E15: the Brief's geometry after each render */
     if(window.EKO_HOST_ENGINE){
       if(E.state.pageId === 'heatmap' && typeof window.EKO_HOST_ENGINE.applySpaceHeat === 'function'){
         const mode = E.state.hmMode === 'comfort' ? 'comfort' : (E.state.hmMode === 'hum' || E.state.hmMode === 'occ' ? 'hum' : 'temp');
@@ -1568,6 +1577,8 @@
     hmLayer(el){ const l = { ...E.state.hmLayers };
       l[el.dataset.v] = !l[el.dataset.v]; E.set({ hmLayers: l }); }
   };
+  /* E15: the Brief's and its focus card's actions join the app's (no name is shared) */
+  [window.EKO_BRIEF, window.EKO_BFOCUS].forEach(m => { if(m && m.ACTS) Object.keys(m.ACTS).forEach(k => { if(!ACTS[k]) ACTS[k] = m.ACTS[k]; }); });
   E.locExit = ACTS.locBack;   /* Escape leaves Locate-in-3D focus the way Back to Assets does (surfaces.js) */
 
   document.addEventListener('click', ev => {
@@ -1713,6 +1724,9 @@
   if(E.state.rolePreview && !(E.data.roles || {})[E.state.rolePreview]) E.state.rolePreview = null;
   if(window.EKO_DG){ window.EKO_DG.specs.assets = window.EKO_GRIDS.assets(E); window.EKO_DG.specs.portfolio = window.EKO_GRIDS.portfolio(E); window.EKO_DG.init(E); }   /* D100 — registered before the first render: a role may land on the portfolio (D105) */
   if(window.EKO_PF) window.EKO_PF.init(E);   /* D103 */
+  if(window.EKO_HO) window.EKO_HO.init(E);          /* E15: the handover store, before the Brief reads it */
+  if(window.EKO_BRIEF){ window.EKO_BRIEF.init(E);   /* E15: read the stored lastSeen before the first render, then stamp this one */
+    document.addEventListener('click', () => window.EKO_BRIEF.touch(), true); }   /* a user action moves lastSeen (debounced); a poll never does */
   if(window.EKO_PERSONA) window.EKO_PERSONA.init(E);
   { const l = E.landing(); E.state.pageId = l.pageId; E.state.module = l.module; E.state.sub = l.sub || null; }   /* D105: the role picks the landing */
   try{ const u = new URL(location.href); if(u.searchParams.get('page') === 'portfolio' && (E.data.sites || []).length > 1 && u.searchParams.get('display') !== 'wall'){ E.state.pageId = 'portfolio'; E.state.module = 'overview'; } }catch(e){}   /* D108: the estate wall exits to the portfolio */
